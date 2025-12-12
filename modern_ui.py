@@ -182,11 +182,21 @@ class CEOGameApp:
             print(f"Could not save theme preference: {e}")
     
     def _create_tooltip(self, widget, text):
-        """Create a simple tooltip that appears on hover."""
+        """Create a simple tooltip that appears on hover with proper cleanup for Windows builds."""
         tooltip = None
+        tooltip_delay = None
         
         def on_enter(event):
-            nonlocal tooltip
+            nonlocal tooltip, tooltip_delay
+            # Cancel any pending hide
+            if tooltip_delay:
+                widget.after_cancel(tooltip_delay)
+                tooltip_delay = None
+            
+            # Don't create if already exists
+            if tooltip:
+                return
+                
             x, y, _, _ = widget.bbox("insert")
             x += widget.winfo_rootx() + 25
             y += widget.winfo_rooty() + 25
@@ -196,19 +206,40 @@ class CEOGameApp:
             tooltip.wm_geometry(f"+{x}+{y}")
             self._set_window_icon(tooltip)
             
+            # Add click-to-close for Windows frozen builds
+            if getattr(sys, 'frozen', False):
+                tooltip.bind("<Button-1>", lambda e: on_leave(None))
+            
             label = ctk.CTkLabel(tooltip, text=text, font=config.FONT_BODY, 
                                fg_color=("#34495E"), text_color=config.COLOR_TEXT, 
                                corner_radius=6, wraplength=300, justify='left')
             label.pack(padx=8, pady=6)
+            
+            # Auto-hide after 5 seconds as failsafe
+            tooltip_delay = widget.after(5000, lambda: on_leave(None))
         
         def on_leave(event):
-            nonlocal tooltip
+            nonlocal tooltip, tooltip_delay
+            # Cancel auto-hide timer
+            if tooltip_delay:
+                widget.after_cancel(tooltip_delay)
+                tooltip_delay = None
+            
+            # Destroy tooltip
             if tooltip:
-                tooltip.destroy()
+                try:
+                    tooltip.destroy()
+                except:
+                    pass
                 tooltip = None
         
-        widget.bind("<Enter>", on_enter)
-        widget.bind("<Leave>", on_leave)
+        # Bind events with add='+' to avoid overwriting existing bindings
+        widget.bind("<Enter>", on_enter, add='+')
+        widget.bind("<Leave>", on_leave, add='+')
+        # Extra bindings for Windows frozen builds
+        if getattr(sys, 'frozen', False):
+            widget.bind("<FocusOut>", on_leave, add='+')
+            widget.bind("<Button-1>", on_leave, add='+')
     
     def _setup_hotkeys(self):
         """Setup keyboard shortcuts for faster gameplay"""
