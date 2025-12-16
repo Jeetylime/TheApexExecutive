@@ -9,6 +9,86 @@ from companies import ACQUIRABLE_COMPANIES
 # Helper for object.__setattr__
 _set = object.__setattr__
 
+# --- BOARD MEMBER CLASS ---
+class BoardMember:
+    """Represents a board member with unique personality and voting preferences."""
+    def __init__(self, name: str, title: str, personality: str, background: str):
+        self.name = name
+        self.title = title
+        self.personality = personality  # Conservative, Progressive, Investor-Focused, Employee-Advocate, Risk-Taker
+        self.background = background
+        self.trust = 50  # 0-100 scale
+        self.satisfaction = 50  # 0-100 scale
+        
+        # Voting tendencies based on personality
+        self.voting_preferences = self._set_voting_preferences()
+    
+    def _set_voting_preferences(self):
+        """Define voting tendencies based on personality."""
+        preferences = {
+            "Conservative": {
+                "acquisitions": -20,  # Less likely to approve
+                "debt": -30,
+                "layoffs": 10,
+                "expansion": -10,
+                "dividends": 20
+            },
+            "Progressive": {
+                "acquisitions": 10,
+                "debt": 5,
+                "layoffs": -30,
+                "expansion": 20,
+                "dividends": -10
+            },
+            "Investor-Focused": {
+                "acquisitions": 15,
+                "debt": 10,
+                "layoffs": 20,
+                "expansion": 10,
+                "dividends": 25
+            },
+            "Employee-Advocate": {
+                "acquisitions": -5,
+                "debt": -15,
+                "layoffs": -40,
+                "expansion": 15,
+                "dividends": -20
+            },
+            "Risk-Taker": {
+                "acquisitions": 30,
+                "debt": 25,
+                "layoffs": 0,
+                "expansion": 35,
+                "dividends": -15
+            }
+        }
+        return preferences.get(self.personality, {})
+    
+    def vote(self, decision_type: str, company_performance: float = 0) -> bool:
+        """
+        Vote on a decision. Returns True for approval, False for rejection.
+        decision_type: 'acquisitions', 'debt', 'layoffs', 'expansion', 'dividends'
+        company_performance: -100 to 100 (affects voting based on trust/satisfaction)
+        """
+        base_chance = 50
+        preference_modifier = self.voting_preferences.get(decision_type, 0)
+        trust_modifier = (self.trust - 50) * 0.5  # Trust affects voting
+        satisfaction_modifier = (self.satisfaction - 50) * 0.3
+        performance_modifier = company_performance * 0.2
+        
+        total_chance = base_chance + preference_modifier + trust_modifier + satisfaction_modifier + performance_modifier
+        total_chance = max(0, min(100, total_chance))  # Clamp to 0-100
+        
+        return random.random() * 100 < total_chance
+    
+    def update_satisfaction(self, delta: int):
+        """Update satisfaction level (clamped 0-100)."""
+        self.satisfaction = max(0, min(100, self.satisfaction + delta))
+    
+    def update_trust(self, delta: int):
+        """Update trust level (clamped 0-100)."""
+        self.trust = max(0, min(100, self.trust + delta))
+
 # --- EXECUTIVE CLASS (C-Suite Officers) ---
 class Executive:
     """Represents a C-suite executive (CFO, CTO, CMO) with strategic bonuses."""
@@ -51,84 +131,164 @@ class Executive:
 
 # --- EMPLOYEE CLASS ---
 class Employee:
-    """Represents a hired employee who can automate certain CEO actions."""
-    def __init__(self, name: str, employee_type: str, signing_bonus: int, daily_salary: int, skill_level: float = 1.0):
-        self.name = name
-        self.employee_type = employee_type  # "Analyst", "Manager", "Specialist", "Automation Expert"
-        self.signing_bonus = signing_bonus  # One-time upfront cost
-        self.daily_salary = daily_salary  # Daily cost deducted from HR budget
-        self.skill_level = skill_level  # 0.5 to 2.0, affects efficiency of auto-actions
+    """Represents a hired employee who performs daily automated work."""
+    
+    # First and last name pools for random generation
+    FIRST_NAMES = ["Alex", "Jordan", "Taylor", "Morgan", "Casey", "Riley", "Avery", "Quinn", 
+                   "Parker", "Blake", "Hayden", "Cameron", "Skylar", "Drew", "Reese",
+                   "Dakota", "Sage", "River", "Phoenix", "Rowan"]
+    
+    LAST_NAMES = ["Chen", "Rodriguez", "Smith", "Johnson", "Williams", "Brown", "Davis",
+                  "Martinez", "Garcia", "Miller", "Wilson", "Moore", "Taylor", "Anderson",
+                  "Thomas", "Jackson", "White", "Harris", "Martin", "Thompson"]
+    
+    def __init__(self, position: str, signing_bonus: int, daily_salary: int, skill_level: float = 1.0):
+        # Generate random name
+        self.name = f"{random.choice(self.FIRST_NAMES)} {random.choice(self.LAST_NAMES)}"
+        self.position = position  # "Marketing Analyst", "Finance Manager", etc.
+        self.employee_type = position  # Keep for backwards compatibility
+        self.signing_bonus = signing_bonus
+        self.daily_salary = daily_salary
+        self.skill_level = skill_level
         self.hired_day = 0
         self.tasks_completed = 0
-        self.assigned_action = None  # Optional explicit assignment set by player
+        self.assigned_action = None
         
-        # Define which CEO actions each employee type can automate
+        # Define work tasks by position
         self.auto_actions = {
-            "Analyst": ["marketing", "email"],
-            "Manager": ["budget", "hr"],
-            "Specialist": ["rnd", "email"],
-            "Automation Expert": ["email", "marketing", "rnd", "budget", "hr"]
-        }.get(employee_type, [])
+            "Marketing Analyst": ["marketing", "customer_outreach"],
+            "Finance Manager": ["budget", "cash_management"],
+            "R&D Specialist": ["rnd", "innovation"],
+            "Operations Manager": ["efficiency", "cost_reduction"],
+            "HR Coordinator": ["morale", "hiring_support", "wellness"],
+            "Project Manager": ["launch_project"],
+            "Executive Assistant": ["email", "marketing", "rnd", "budget", "wellness"]
+        }.get(position, [])
     
     def can_perform_action(self, action_name: str) -> bool:
-        """Check if this employee can perform a given action."""
         return action_name in self.auto_actions
 
     def set_assignment(self, action_name: str | None):
-        """Assign a specific action (or clear with None)."""
         if action_name is not None and action_name not in self.auto_actions:
-            raise ValueError("Action not available for this employee type.")
+            raise ValueError("Action not available for this employee.")
         self.assigned_action = action_name
 
 
-# --- PROJECT CLASS (Remains the same) ---
-class Project:
-    def __init__(self, name, initial_cost, risk, duration_days, project_type):
+# --- UNIFIED PROJECT CLASS ---
+class Product:
+    """Unified project system: Development phase → Market lifecycle (Launch/Growth/Maturity/Decline)"""
+    
+    LIFECYCLE_STAGES = {
+        "Development": {"duration": None, "revenue_mult": 0, "growth_rate": 1.0},  # Custom duration
+        "Launch": {"duration": 30, "revenue_mult": 0.5, "growth_rate": 1.05},
+        "Growth": {"duration": 90, "revenue_mult": 1.2, "growth_rate": 1.03},
+        "Maturity": {"duration": 180, "revenue_mult": 1.5, "growth_rate": 1.0},
+        "Decline": {"duration": 90, "revenue_mult": 0.8, "growth_rate": 0.97}
+    }
+    
+    def __init__(self, name, investment, base_price, development_days, project_type, risk):
         self.name = name
-        self.initial_cost = initial_cost
-        self.risk = risk  # Auto-calculated based on duration
-        self.duration_days = duration_days
-        self.days_remaining = duration_days
-        self.type = project_type
-        self.daily_cost = initial_cost / duration_days
-        # Reduced revenue multiplier: was 0.5-6.0x, now 0.3-2.5x (less overpowered)
-        self.potential_revenue = initial_cost * random.uniform(0.3, 2.5)
-        self.debt_financed = initial_cost * 0.9  # 90% goes to debt, 10% upfront
-
-    def process_day(self, efficiency_mod):
-        self.days_remaining -= 1
-        progress_bonus = max(0, (efficiency_mod - 60) / 100) 
-        if random.random() < 0.05 + progress_bonus:
-             self.days_remaining -= 1 
-        return self.daily_cost
-
-    def is_complete(self):
-        return self.days_remaining <= 0
-
-    def simulate_outcome(self, corp):
-        # Risk adjusted by tech level (better tech = lower risk)
-        adjusted_risk = self.risk * (1 - corp.technology_level / 200)
+        self.initial_investment = investment
+        self.base_price = base_price
+        self.development_days = development_days
+        self.type = project_type  # 1=R&D, 2=Marketing, 3=Operations
+        self.risk = risk
         
-        # Catastrophic failure chance (reduced from 20% to 10% at low ops efficiency)
-        if corp.dept_efficiency['Operations'] < 30 and random.random() < 0.10:
-            cash_change = -self.initial_cost * random.uniform(0.5, 1.0)  # Reduced loss
-            tech_boost = 0
-            efficiency_change = None
-            return "CATASTROPHIC FAILURE. Project cancelled, partial budget lost.", tech_boost, efficiency_change, cash_change
+        # Development phase tracking
+        self.lifecycle_stage = "Development"
+        self.days_in_stage = 0
+        self.total_days_live = 0
+        self.is_retired = False
         
-        # Success chance based on adjusted risk
-        if adjusted_risk < random.uniform(0, 1):
-            # Success: 60-100% of potential revenue (was 80-120%)
-            cash_change = self.potential_revenue * random.uniform(0.6, 1.0)
-            tech_boost = self.initial_cost / 10000000 * random.uniform(3, 7)  # Reduced from 5-10
-            efficiency_change = {'R&D': 1, 'Marketing': 0.5} if self.type == 1 else None
-            return "SUCCESS. Project delivered on target with good returns.", tech_boost, efficiency_change, cash_change
-        else:
-            # Partial success: 10-40% of potential revenue (was 10-50%)
-            cash_change = self.potential_revenue * random.uniform(0.1, 0.4)
-            tech_boost = self.initial_cost / 10000000 * random.uniform(0.5, 2)  # Reduced from 1-3
-            efficiency_change = None
-            return "LIMITED SUCCESS. Project underperformed expectations.", tech_boost, efficiency_change, cash_change
+        # Financial tracking
+        self.daily_cost = investment / development_days  # Costs during development
+        self.daily_revenue = 0  # Revenue after launch
+        self.total_revenue = 0
+        self.total_costs_paid = 0
+        
+        # Market performance (set after development)
+        self.quality_score = 0
+        self.market_share = 0
+        self.customer_satisfaction = 50
+        self.units_sold = 0
+        
+        # Completion bonus potential
+        self.completion_bonus_paid = False
+    
+    def launch(self, corp_tech_level):
+        """Called when project completes development - transitions to Launch phase."""
+        # Quality based on tech level + project type bonus
+        type_bonus = {1: 10, 2: 5, 3: 3}.get(self.type, 0)  # R&D projects get better quality
+        self.quality_score = min(100, corp_tech_level + type_bonus + random.uniform(-5, 15))
+        self.market_share = random.uniform(0.5, 2.0)  # Start with small market share
+        self.customer_satisfaction = min(100, 40 + self.quality_score * 0.5)
+        self.lifecycle_stage = "Launch"
+        self.days_in_stage = 0
+    
+    def update_day(self, customer_base, competitors_count, corp_efficiency):
+        """Update project each day - development costs OR market revenue."""
+        if self.is_retired:
+            return 0, 0
+        
+        self.total_days_live += 1
+        self.days_in_stage += 1
+        
+        # DEVELOPMENT PHASE: Costs money, no revenue
+        if self.lifecycle_stage == "Development":
+            cost = self.daily_cost
+            self.total_costs_paid += cost
+            
+            # Check if development complete
+            if self.days_in_stage >= self.development_days:
+                # Development complete! Will transition to Launch in Corporation.complete_project()
+                pass
+            
+            return cost, 0  # cost, revenue
+        
+        # MARKET PHASES: Generate revenue
+        self._update_lifecycle_stage()
+        
+        stage_data = self.LIFECYCLE_STAGES[self.lifecycle_stage]
+        base_revenue = self.base_price * self.market_share * (customer_base / 100)
+        
+        # Quality and efficiency bonuses
+        quality_bonus = 1 + (self.quality_score - 50) / 100
+        efficiency_bonus = 1 + (corp_efficiency - 50) / 200  # Small boost from efficiency
+        lifecycle_mult = stage_data["revenue_mult"]
+        
+        # Competition pressure
+        competition_factor = 1 / (1 + competitors_count * 0.1)
+        
+        self.daily_revenue = base_revenue * quality_bonus * efficiency_bonus * lifecycle_mult * competition_factor
+        self.total_revenue += self.daily_revenue
+        
+        # Market share growth/decline
+        growth = stage_data["growth_rate"]
+        self.market_share *= growth
+        self.market_share = min(30, self.market_share)  # Cap at 30%
+        
+        # Units sold
+        self.units_sold += int(self.daily_revenue / self.base_price) if self.base_price > 0 else 0
+        
+        return 0, self.daily_revenue  # cost, revenue
+    
+    def _update_lifecycle_stage(self):
+        """Progress through market lifecycle stages."""
+        if self.lifecycle_stage == "Development":
+            return  # Handled separately
+        elif self.lifecycle_stage == "Launch" and self.days_in_stage >= 30:
+            self.lifecycle_stage = "Growth"
+            self.days_in_stage = 0
+        elif self.lifecycle_stage == "Growth" and self.days_in_stage >= 90:
+            self.lifecycle_stage = "Maturity"
+            self.days_in_stage = 0
+        elif self.lifecycle_stage == "Maturity" and self.days_in_stage >= 180:
+            self.lifecycle_stage = "Decline"
+            self.days_in_stage = 0
+    
+    def retire(self):
+        """Retire this project from the market."""
+        self.is_retired = True
 
 
 # --- COMPETITOR CLASS ---
@@ -162,10 +322,9 @@ class Competitor:
         if len(self.stock_history) > 90:
             self.stock_history.pop(0)
 
-
 # --- CORPORATION CLASS ---
 class Corporation:
-    def __init__(self):
+    def __init__(self, difficulty="Easy"):
         self.day = 1
         self.quarter = 1
         self.year = 1
@@ -173,32 +332,60 @@ class Corporation:
         self.ceo_name = ""
         self.email_system = None
         self.log = deque(maxlen=200)
+        self.recent_changes = deque(maxlen=5)  # Track last 5 impactful changes
+        self.difficulty = difficulty  # Easy only (simplified)
+
+        # Apply difficulty modifiers to starting values
+        diff_mods = self._get_difficulty_modifiers()
 
         # Metrics
-        self.cash = 35000000  # $35M initial starting capital
+        self.cash = int(35000000 * diff_mods['cash'])
         self.debt = 0
-        self.max_debt_limit = 50000000  # Base maximum debt limit ($50M)
+        self.max_debt_limit = int(50000000 * diff_mods['debt_limit'])
         self.stock_price = 10.0
         self.shares_outstanding = 5000000
         self.market_cap = self.stock_price * self.shares_outstanding
 
-        self.reputation = 35
-        self.employee_morale = 38
-        self.ceo_health = 50
-        self.board_confidence = 40
+        self.reputation = int(35 * diff_mods['starting_stats'])
+        self.employee_morale = int(38 * diff_mods['starting_stats'])
+        self.ceo_health = int(50 * diff_mods['starting_stats'])
+        self.board_confidence = int(40 * diff_mods['starting_stats'])
         self.customer_base = 25
         self.technology_level = 25
         self.market_mood = "Neutral"
         
-        # Initialize competitors (5 rival companies)
-        self.competitors = [
-            Competitor("NovaTech Systems", 253.0, "aggressive"),
-            Competitor("Apex Digital Corp", 212.0, "balanced"),
-            Competitor("Titan Industries", 171.0, "conservative"),
-            Competitor("Quantum Dynamics", 130.0, "aggressive"),
-            Competitor("Horizon Solutions", 89.0, "balanced")
+        # Initialize Board of Directors (5 members with diverse personalities)
+        self.board_members = [
+            BoardMember("Margaret Chen", "Chairwoman", "Conservative", 
+                       "Former Goldman Sachs partner with 30 years in finance. Prioritizes fiscal responsibility."),
+            BoardMember("David Rodriguez", "Vice Chair", "Progressive", 
+                       "Tech entrepreneur and sustainability advocate. Champions innovation and employee welfare."),
+            BoardMember("Sarah Blackwood", "Board Member", "Investor-Focused", 
+                       "Hedge fund manager representing major shareholders. Demands strong returns."),
+            BoardMember("James Mitchell", "Board Member", "Employee-Advocate", 
+                       "Former union leader and labor attorney. Fights for worker protections."),
+            BoardMember("Dr. Raj Patel", "Board Member", "Risk-Taker", 
+                       "Serial entrepreneur with multiple IPO exits. Embraces bold strategies.")
         ]
-        self.stock_history = [25.0]  # Track player stock price history 
+        
+        # Initialize competitors (12 rival companies - Wall Street Leaderboard)
+        # Player starts FAR behind at ~$10 stock price
+        self.competitors = [
+            Competitor("Goldman Technologies", 485.0, "conservative"),
+            Competitor("Morgan Digital", 441.0, "balanced"),
+            Competitor("BlackRock Industries", 398.0, "conservative"),
+            Competitor("Vanguard Systems", 362.0, "balanced"),
+            Competitor("JP Morgan Tech", 329.0, "balanced"),
+            Competitor("Berkshire Innovations", 294.0, "conservative"),
+            Competitor("Fidelity Dynamics", 261.0, "balanced"),
+            Competitor("NovaTech Systems", 228.0, "aggressive"),
+            Competitor("Apex Digital Corp", 195.0, "balanced"),
+            Competitor("Titan Industries", 162.0, "conservative"),
+            Competitor("Quantum Dynamics", 129.0, "aggressive"),
+            Competitor("Horizon Solutions", 96.0, "balanced")
+        ]
+        self.stock_history = [25.0]  # Track player stock price history
+        self.has_won_game = False  # Track if player reached #1 on leaderboard 
         
         # NEW: Global Scenario System
         self.current_scenario = "Stable Growth"
@@ -217,11 +404,12 @@ class Corporation:
         self.long_timer_multiplier = 1.0
 
         # NEW: Annual Department Budgets (track spending per year)
+        budget_multiplier = diff_mods['budget']
         self.annual_budget = {
-            "R&D": 50000000,            # $50M per year (scaled 50%)
-            "Marketing": 50000000,      # $50M per year
-            "Operations": 50000000,     # $50M per year
-            "HR": 50000000,             # $50M per year
+            "R&D": int(50000000 * budget_multiplier),
+            "Marketing": int(50000000 * budget_multiplier),
+            "Operations": int(50000000 * budget_multiplier),
+            "HR": int(50000000 * budget_multiplier),
         }
         self.budget_spent = {
             "R&D": 0,
@@ -230,11 +418,12 @@ class Corporation:
             "HR": 0,
         }
         
+        # Reduce department base costs significantly
         self.departments = {
-            "R&D": config.INITIAL_DEPT_BUDGET // 2,  # Scaled 50%
-            "Marketing": config.INITIAL_DEPT_BUDGET // 2,
-            "Operations": config.INITIAL_DEPT_BUDGET // 2,
-            "HR": config.INITIAL_DEPT_BUDGET // 2,
+            "R&D": int((config.INITIAL_DEPT_BUDGET // 4) * budget_multiplier),  # Reduced from //2 to //4
+            "Marketing": int((config.INITIAL_DEPT_BUDGET // 4) * budget_multiplier),
+            "Operations": int((config.INITIAL_DEPT_BUDGET // 4) * budget_multiplier),
+            "HR": int((config.INITIAL_DEPT_BUDGET // 4) * budget_multiplier),
         }
         self.dept_efficiency = {
             "R&D": 35, "Marketing": 35, "Operations": 35, "HR": 35  # Scaled 50%
@@ -251,13 +440,18 @@ class Corporation:
         # Competitor pressure tracking
         self.days_without_marketing = 0  # Track days since last marketing investment
 
-        # NEW: ACTION POINTS SYSTEM (3 per day)
-        self.action_points = 3
-        self.max_action_points = 3
+        # NEW: ACTION POINTS SYSTEM (3 per day, 4 on Easy)
+        diff_mods = self._get_difficulty_modifiers()
+        self.action_points = diff_mods['action_points']
+        self.max_action_points = diff_mods['action_points']
         
         # NEW: EMPLOYEE AUTOMATION SYSTEM
         self.employees = []  # List of hired Employee objects
         self.automation_log = deque(maxlen=50)  # Track employee auto-actions
+        
+        # NEW: PRODUCT PORTFOLIO
+        self.products = []  # List of launched Product objects
+        self.total_product_revenue = 0  # Daily revenue from all products
         
         # NEW: EXECUTIVE TEAM (C-Suite)
         self.executives = []  # List of hired Executive objects
@@ -282,6 +476,22 @@ class Corporation:
         ]
         self.total_acquisition_profit = 0  # Track cumulative profit from acquisitions
 
+        # NEW: EXECUTIVE POINTS & UPGRADE SYSTEM
+        self.executive_points = 0  # Currency for permanent upgrades
+        self.purchased_upgrades = []  # List of upgrade IDs already purchased
+        self.upgrade_bonuses = {  # Active permanent bonuses from upgrades
+            'revenue_boost': 0,
+            'cost_reduction': 0,
+            'stock_boost': 0,
+            'project_success': 0,
+            'debt_limit_mult': 0,
+            'interest_reduction': 0,
+            'customer_growth': 0,
+            'tech_speed': 0,
+            'action_points_bonus': 0,
+            'health_regen': 0,
+        }
+
         # Game State
         self.projects = []
         
@@ -305,6 +515,24 @@ class Corporation:
                 ],
                 'type': 'BAD'
             }
+        }
+    
+    def _get_difficulty_modifiers(self):
+        """Return difficulty multipliers for game parameters.
+        Difficulty simplified to Easy-only and made more forgiving.
+        """
+        # Easy-only mode (boosted)
+        return {
+            'cash': 3.0,              # Start with 3x cash ($105M)
+            'debt_limit': 2.0,        # 2x higher debt limit
+            'starting_stats': 1.5,    # 50% better starting stats
+            'action_points': 3,       # 3 action points per day
+            'interest_rate': 0.5,     # 50% lower interest rates
+            'revenue': 1.5,           # 50% more revenue
+            'costs': 0.7,             # 30% lower costs
+            'risk_reduction': 0.5,    # 50% lower project risks
+            'budget': 2.0,            # 2x larger budgets
+            'market_volatility': 0.6, # Less volatile markets
         }
 
     def get_budget_remaining(self, dept: str) -> float:
@@ -460,11 +688,23 @@ class Corporation:
         self.log.append(f"🪧 STRIKE! Employees have walked out for {strike_duration} days. Massive productivity loss and reputation damage.")
         return f"STRIKE INITIATED! Duration: {strike_duration} days. Severe operational impact."
 
-    def set_identity(self, corp_name, ceo_name, email_system):
+    def set_identity(self, corp_name, ceo_name, email_system, difficulty=None):
         _set(self, 'corp_name', corp_name)  # ✅ FIXED
         _set(self, 'ceo_name', ceo_name)
         _set(self, 'email_system', email_system)
-        self.log.append(f"Game started as **{corp_name}** under CEO **{ceo_name}**.")
+        if difficulty:
+            _set(self, 'difficulty', difficulty)
+            # Re-apply difficulty modifiers if changed after init
+            diff_mods = self._get_difficulty_modifiers()
+            _set(self, 'cash', int(35000000 * diff_mods['cash']))
+            _set(self, 'max_debt_limit', int(50000000 * diff_mods['debt_limit']))
+            _set(self, 'reputation', int(35 * diff_mods['starting_stats']))
+            _set(self, 'employee_morale', int(38 * diff_mods['starting_stats']))
+            _set(self, 'ceo_health', int(50 * diff_mods['starting_stats']))
+            _set(self, 'board_confidence', int(40 * diff_mods['starting_stats']))
+            _set(self, 'action_points', diff_mods['action_points'])
+            _set(self, 'max_action_points', diff_mods['action_points'])
+        self.log.append(f"Game started as **{corp_name}** under CEO **{ceo_name}**.\")")
 
     def calculate_daily_rnd_cost(self):
         cost = 0
@@ -529,65 +769,72 @@ class Corporation:
             self.dept_efficiency[dept] = max(1, min(100, base_eff))
 
     def _process_projects(self):
-        total_project_costs = 0
-        finished_projects = []
+        """Process all active projects - both development and market phases."""
+        total_costs = 0
+        total_revenue = 0
+        completed_dev_projects = []
 
-        for i, p in enumerate(self.projects):
-            # Determine efficiency modifier based on project type
-            if p.type == 1:
-                eff_mod = self.dept_efficiency['R&D']
-            elif p.type == 2:
-                eff_mod = self.dept_efficiency['Marketing']
-            elif p.type == 3:
-                eff_mod = self.dept_efficiency['Operations']
+        for i, proj in enumerate(self.projects):
+            # Determine efficiency for this project type
+            if proj.type == 1:
+                eff = self.dept_efficiency['R&D']
+            elif proj.type == 2:
+                eff = self.dept_efficiency['Marketing']
+            elif proj.type == 3:
+                eff = self.dept_efficiency['Operations']
             else:
-                eff_mod = 70
-                
-            total_project_costs += p.process_day(eff_mod)
-
-            if p.is_complete():
-                result_msg, tech_boost, efficiency_change, cash_change = p.simulate_outcome(self)
-
-                # If this was a long-duration project, apply the long_timer_multiplier to rewards
-                is_long = getattr(p, 'duration_days', 0) >= 30
-                multiplier = self.long_timer_multiplier if is_long and self.long_timer_multiplier > 1.0 else 1.0
-
-                applied_tech = tech_boost * multiplier
-                _set(self, 'technology_level', min(100, self.technology_level + applied_tech))
-
-                # Apply cash change (reward or loss) and record as revenue/cost appropriately
-                applied_cash = cash_change * multiplier
-                _set(self, 'cash', self.cash + applied_cash)
-                if applied_cash >= 0:
-                    _set(self, 'quarterly_revenue', self.quarterly_revenue + applied_cash)
-                else:
-                    _set(self, 'quarterly_costs', self.quarterly_costs + abs(applied_cash))
-
-                if efficiency_change:
-                    for dept, change in efficiency_change.items():
-                        self.permanent_efficiency_boosts[dept] += change
-                        self.log.append(f"Project '{p.name}' gave permanent {dept} Eff Boost of +{change:.0f}%.")
-
-                # Log summary including applied cash and tech changes
-                cash_str = f"+${applied_cash:,.0f}" if applied_cash >= 0 else f"-${abs(applied_cash):,.0f}"
-                self.log.append(f"Project **{p.name}** finished! {result_msg} (Cash: {cash_str}, Tech +{applied_tech:.2f})")
-                finished_projects.append(i)
-
-        # Remove finished projects (in reverse order to not mess up indices)
-        for i in reversed(finished_projects):
-            self.projects.pop(i)
+                eff = 70
             
-        _set(self, 'cash', self.cash - total_project_costs)
-        _set(self, 'quarterly_costs', self.quarterly_costs + total_project_costs)
-        self.log.append(f"Projects Cost: ${total_project_costs:,.0f}")
+            # Update project (development or market phase)
+            cost, revenue = proj.update_day(self.customer_base, len(self.competitors), eff)
+            total_costs += cost
+            total_revenue += revenue
+            
+            # Check if development completed (transition to Launch)
+            if proj.lifecycle_stage == "Development" and proj.days_in_stage >= proj.development_days:
+                proj.launch(self.technology_level)
+                
+                # Risk check - did development succeed?
+                adjusted_risk = proj.risk * (1 - self.technology_level / 200)
+                if random.random() < adjusted_risk:
+                    # Development failed!
+                    failure_cost = proj.initial_investment * random.uniform(0.2, 0.5)
+                    _set(self, 'cash', self.cash - failure_cost)
+                    _set(self, 'quarterly_costs', self.quarterly_costs + failure_cost)
+                    self.log.append(f"⚠️ Project **{proj.name}** development FAILED. Lost ${failure_cost:,.0f}")
+                    completed_dev_projects.append(i)
+                else:
+                    # Success! Now in market
+                    tech_boost = proj.initial_investment / 10000000 * random.uniform(2, 5)
+                    _set(self, 'technology_level', min(100, self.technology_level + tech_boost))
+                    
+                    # Efficiency boost for R&D projects
+                    if proj.type == 1:
+                        self.permanent_efficiency_boosts['R&D'] += 1
+                        self.log.append(f"Project '{proj.name}' boosted R&D Efficiency by +1%")
+                    
+                    self.log.append(f"✅ Project **{proj.name}** launched! Quality: {proj.quality_score:.0f}/100, Tech +{tech_boost:.1f}")
+        
+        # Remove failed projects
+        for i in reversed(completed_dev_projects):
+            self.projects.pop(i)
+        
+        # Apply net financial impact
+        net = total_revenue - total_costs
+        _set(self, 'cash', self.cash + net)
+        _set(self, 'quarterly_revenue', self.quarterly_revenue + total_revenue)
+        _set(self, 'quarterly_costs', self.quarterly_costs + total_costs)
+        
+        if total_revenue > 0 or total_costs > 0:
+            self.log.append(f"Projects: Rev ${total_revenue:,.0f}, Cost ${total_costs:,.0f}, Net ${net:+,.0f}")
 
     def _generate_costs(self):
         # Daily salary costs per department (deduct from annual budgets)
-        daily_salary = sum(self.departments.values()) / 30 
+        daily_salary = sum(self.departments.values()) / 365  # Changed from /30 to /365 - YEARLY not monthly!
         
         # Deduct salary cost from each department proportionally
         for dept in self.departments.keys():
-            dept_daily_salary = self.departments[dept] / 30
+            dept_daily_salary = self.departments[dept] / 365  # Changed from /30 to /365
             self.budget_spent[dept] += dept_daily_salary
         
         # Employee daily salaries (deduct from HR budget)
@@ -600,8 +847,8 @@ class Corporation:
         interest_rate = self._get_interest_rate()
         debt_interest = self.debt * (interest_rate / 365)
         
-        # Minimum debt payment (1% daily)
-        min_debt_payment = self.debt * 0.01
+        # Minimum debt payment (0.1% daily = ~36.5% per year)
+        min_debt_payment = self.debt * 0.001  # Reduced from 0.01 to 0.001
         
         total_costs = daily_salary + debt_interest + min_debt_payment
         
@@ -609,6 +856,14 @@ class Corporation:
         scenario = config.SCENARIOS.get(self.current_scenario)
         cost_mod = scenario.get('cost_mod', 1.0)
         total_costs *= cost_mod
+        
+        # Apply difficulty modifier to reduce costs on Easy/Medium
+        diff_mods = self._get_difficulty_modifiers()
+        total_costs *= diff_mods['costs']
+        
+        # Apply upgrade bonuses for cost reduction
+        cost_multiplier = 1.0 - (self.upgrade_bonuses['cost_reduction'] / 100)
+        total_costs *= cost_multiplier
         
         _set(self, 'cash', self.cash - total_costs)
         _set(self, 'quarterly_costs', self.quarterly_costs + total_costs)
@@ -621,12 +876,20 @@ class Corporation:
         
         self.log.append(f"Costs: ${total_costs:,.0f} (Debt payment: ${min_debt_payment:,.0f})")
 
+        # Profit cushion: rebate part of losses to keep the company healthier
+        profit_gap = self.quarterly_costs - self.quarterly_revenue
+        if profit_gap > 0:
+            cushion = profit_gap * 0.25  # 25% rebate on losses
+            _set(self, 'cash', self.cash + cushion)
+            _set(self, 'quarterly_costs', max(0, self.quarterly_costs - cushion))
+            self.log.append(f"💡 Profit cushion applied: ${cushion:,.0f} rebate to ease losses")
+
     def _generate_revenue(self):
         # Revenue is proportional to market cap, technology, and customer base
-        base_revenue = self.market_cap * 0.0005 
+        base_revenue = self.market_cap * 0.004  # Increased further to help stay profitable
         
-        tech_mod = self.technology_level / 100
-        cust_mod = self.customer_base / 100
+        tech_mod = 0.5 + (self.technology_level / 100) * 0.5  # Min 0.5x, max 1.0x
+        cust_mod = 0.5 + (self.customer_base / 100) * 0.5  # Min 0.5x, max 1.0x
         
         # Apply Market Mood and Scenario modifiers
         if self.market_mood == 'Bullish':
@@ -639,7 +902,27 @@ class Corporation:
         scenario = config.SCENARIOS.get(self.current_scenario)
         scenario_mod = scenario.get('rev_mod', 1.0)
         
-        total_revenue = base_revenue * tech_mod * cust_mod * market_mod * scenario_mod * random.uniform(0.95, 1.05)
+        # Apply difficulty modifier for Easy/Medium
+        diff_mods = self._get_difficulty_modifiers()
+        
+        # Apply upgrade bonuses
+        revenue_multiplier = 1.0 + (self.upgrade_bonuses['revenue_boost'] / 100)
+        customer_growth_bonus = self.upgrade_bonuses['customer_growth']
+        
+        total_revenue = base_revenue * tech_mod * cust_mod * market_mod * scenario_mod * diff_mods['revenue'] * revenue_multiplier * random.uniform(0.95, 1.05)
+        
+        # Log revenue upgrade bonus (after total_revenue is calculated)
+        if self.upgrade_bonuses['revenue_boost'] > 0:
+            bonus_amount = total_revenue * (self.upgrade_bonuses['revenue_boost'] / 100)
+            if bonus_amount > 100000:  # Only log if significant
+                self.recent_changes.append(("positive", f"Revenue +${bonus_amount/1000000:.1f}M from upgrades"))
+        
+        # Apply customer growth bonus from upgrades
+        if customer_growth_bonus > 0 and random.random() < 0.3:  # 30% chance daily
+            old_base = self.customer_base
+            self.customer_base = min(100, self.customer_base + (customer_growth_bonus / 10))
+            if self.customer_base > old_base:
+                self.recent_changes.append(("positive", f"Customers +{(self.customer_base - old_base):.1f}% from growth upgrades"))
         
         _set(self, 'cash', self.cash + total_revenue)
         _set(self, 'quarterly_revenue', self.quarterly_revenue + total_revenue)
@@ -679,23 +962,59 @@ class Corporation:
         
         # Analyst Rating Factor (Most significant driver)
         rating_index = config.ANALYST_RATINGS.index(self.analyst_rating)
-        rating_factor = (rating_index - 2) * 0.008 # -0.016 to +0.016 max change (reduced from 0.025)
+        rating_factor = (rating_index - 2) * 0.025  # Increased to 0.025 for easier stock growth
         
         # Performance Factor (Revenue vs. Previous Quarter Revenue)
         performance_factor = (self.quarterly_revenue - self.previous_quarter_revenue) / self.previous_quarter_revenue if self.previous_quarter_revenue else 0
-        performance_factor = min(0.015, max(-0.015, performance_factor * 0.03)) # Reduced from 0.05/0.1
+        performance_factor = min(0.04, max(-0.01, performance_factor * 0.08))  # Higher reward, lower punishment
+        
+        # Player Action Bonuses (NEW - reward active play)
+        action_bonus = 0
+        bonus_sources = []
+        if self.cash > 0:  # Just staying solvent is good
+            action_bonus += 0.004
+            bonus_sources.append("solvency")
+        if self.quarterly_revenue > self.quarterly_costs:  # Profitable
+            action_bonus += 0.010
+            bonus_sources.append("profitability")
+        if self.customer_base > 30:  # Growing market share
+            action_bonus += 0.006
+            bonus_sources.append("customers")
+        if len(self.projects) > 0:  # Active innovation
+            action_bonus += 0.007
+            bonus_sources.append("innovation")
+        if self.technology_level > 30:  # Investing in tech
+            action_bonus += 0.005
+            bonus_sources.append("tech")
         
         # General Sentiment Factor (Market Mood & Confidence)
-        confidence_factor = (self.board_confidence - 50) / 3000 # Reduced from 1000
+        confidence_factor = (self.board_confidence - 40) / 1500  # Boosted from 2000 for easier stock growth
         
-        daily_change = (rating_factor + performance_factor + confidence_factor) * self.stock_price
+        daily_change = (rating_factor + performance_factor + action_bonus + confidence_factor) * self.stock_price
+        
+        # Track stock changes from player actions
+        if action_bonus > 0 and len(bonus_sources) > 0:
+            stock_increase = action_bonus * self.stock_price
+            if stock_increase > 0.10:  # Only log if significant
+                reasons = ", ".join(bonus_sources)
+                if hasattr(self, 'recent_changes'):
+                    self.recent_changes.append(("positive", f"Stock +${stock_increase:.2f} from {reasons}"))
+        
+        # Apply upgrade bonuses to stock growth
+        stock_boost = 1.0 + (self.upgrade_bonuses['stock_boost'] / 100)
+        if self.upgrade_bonuses['stock_boost'] > 0 and daily_change > 0:
+            boost_amount = daily_change * (self.upgrade_bonuses['stock_boost'] / 100)
+            if boost_amount > 0.10 and hasattr(self, 'recent_changes'):
+                self.recent_changes.append(("positive", f"Stock +${boost_amount:.2f} from Stock Momentum upgrade"))
+        daily_change *= stock_boost
         
         # Apply Scenario Impact
         scenario = config.SCENARIOS.get(self.current_scenario)
         stock_mod = scenario.get('stock_mod', 1.0)
         daily_change *= stock_mod
         
-        new_price = self.stock_price + daily_change + random.uniform(-0.1, 0.1) # Noise
+        # Reduce random noise for more consistent growth
+        new_price = self.stock_price + daily_change + random.uniform(-0.02, 0.02)
         
         _set(self, 'stock_price', max(1.0, new_price))
         _set(self, 'market_cap', self.stock_price * self.shares_outstanding)
@@ -715,6 +1034,11 @@ class Corporation:
         decay = 1.0
         if self.debt > self.cash: decay += 0.5
         if self.employee_morale < 40: decay += 0.5
+        
+        # Apply health regen from upgrades
+        health_regen = self.upgrade_bonuses['health_regen']
+        decay -= health_regen
+        
         _set(self, 'ceo_health', max(0, self.ceo_health - decay))
         
         # Board Confidence: Improves with high cash/stock price, decays with low
@@ -754,18 +1078,24 @@ class Corporation:
         
         debt_to_equity = self.debt / equity
         
-        # Determine credit rating
-        if debt_to_equity < 0.1 and self.cash > 0:
+        # Determine credit rating (STRICTER THRESHOLDS - harder to achieve high ratings)
+        # AAA requires very low debt, high cash reserves, and profitability
+        if debt_to_equity < 0.05 and self.cash > self.market_cap * 0.15 and self.quarterly_revenue > self.quarterly_costs:
             new_rating = "AAA"
-        elif debt_to_equity < 0.3:
+        # AA requires minimal debt and strong cash position
+        elif debt_to_equity < 0.15 and self.cash > self.market_cap * 0.10:
             new_rating = "AA"
-        elif debt_to_equity < 0.5:
+        # A requires low debt and positive cash
+        elif debt_to_equity < 0.30 and self.cash > 0:
             new_rating = "A"
-        elif debt_to_equity < 0.8:
+        # BBB requires moderate debt levels
+        elif debt_to_equity < 0.55:
             new_rating = "BBB"
-        elif debt_to_equity < 1.2:
+        # BB for higher debt
+        elif debt_to_equity < 0.90:
             new_rating = "BB"
-        elif debt_to_equity < 2.0:
+        # B for very high debt
+        elif debt_to_equity < 1.5:
             new_rating = "B"
         else:
             new_rating = "CCC"
@@ -784,8 +1114,8 @@ class Corporation:
                 penalty = (new_index - old_index) * 0.05
                 self.stock_price *= (1 - penalty)
                 self.log.append(f"⚠️ Credit rating DOWNGRADED: {old_rating} → {new_rating} (Stock price -{penalty*100:.0f}%)")
-            else:  # Upgrade
-                bonus = (old_index - new_index) * 0.03
+            else:  # Upgrade (REDUCED BONUS - smaller reward for improvements)
+                bonus = (old_index - new_index) * 0.02  # Reduced from 0.03
                 self.stock_price *= (1 + bonus)
                 self.log.append(f"✓ Credit rating UPGRADED: {old_rating} → {new_rating} (Stock price +{bonus*100:.0f}%)")
     
@@ -800,7 +1130,132 @@ class Corporation:
             "B": 0.14,    # 14% (increased from 11%)
             "CCC": 0.20   # 20% (increased from 15%)
         }
-        return rates.get(self.credit_rating, 0.05)
+        base_rate = rates.get(self.credit_rating, 0.05)
+        # Apply difficulty modifier
+        diff_mods = self._get_difficulty_modifiers()
+        return base_rate * diff_mods['interest_rate']
+    
+    def _update_board_satisfaction(self):
+        """Update board member satisfaction and trust based on company performance."""
+        # Calculate performance score
+        stock_change = ((self.stock_price - 10.0) / 10.0) * 100  # % change from initial
+        profit_margin = ((self.quarterly_revenue - self.quarterly_costs) / max(self.quarterly_revenue, 1)) * 100 if self.quarterly_revenue > 0 else -50
+        morale_score = self.employee_morale - 50
+        
+        for member in self.board_members:
+            # Base satisfaction change on performance
+            satisfaction_delta = 0
+            trust_delta = 0
+            
+            # Stock performance affects all board members
+            if stock_change > 20:
+                satisfaction_delta += 2
+                trust_delta += 1
+            elif stock_change < -20:
+                satisfaction_delta -= 2
+                trust_delta -= 1
+            
+            # Personality-specific updates
+            if member.personality == "Conservative":
+                # Cares about debt and stability
+                if self.debt < self.market_cap * 0.3:
+                    satisfaction_delta += 1
+                if self.debt > self.market_cap * 0.8:
+                    satisfaction_delta -= 2
+            
+            elif member.personality == "Progressive":
+                # Cares about employee morale and innovation
+                if self.employee_morale > 60:
+                    satisfaction_delta += 2
+                if self.employee_morale < 30:
+                    satisfaction_delta -= 2
+            
+            elif member.personality == "Investor-Focused":
+                # Only cares about profits and stock price
+                if profit_margin > 15:
+                    satisfaction_delta += 3
+                if profit_margin < 0:
+                    satisfaction_delta -= 3
+            
+            elif member.personality == "Employee-Advocate":
+                # Heavily influenced by morale and reputation
+                satisfaction_delta += int(morale_score / 20)
+                if self.reputation > 60:
+                    satisfaction_delta += 1
+            
+            elif member.personality == "Risk-Taker":
+                # Likes growth and bold moves
+                if self.customer_base > 50:
+                    satisfaction_delta += 2
+                if self.technology_level > 50:
+                    satisfaction_delta += 1
+            
+            # Update the member
+            member.update_satisfaction(satisfaction_delta)
+            member.update_trust(trust_delta)
+    
+    def get_board_approval(self, decision_type: str) -> tuple[bool, str]:
+        """
+        Request board approval for major decisions.
+        Returns (approved: bool, message: str)
+        decision_type: 'acquisitions', 'debt', 'layoffs', 'expansion', 'dividends'
+        """
+        # Calculate company performance score for voting
+        stock_change = ((self.stock_price - 10.0) / 10.0) * 100
+        profit_margin = ((self.quarterly_revenue - self.quarterly_costs) / max(self.quarterly_revenue, 1)) * 100 if self.quarterly_revenue > 0 else -50
+        performance = (stock_change + profit_margin) / 2
+        
+        # Get votes from each board member
+        votes = []
+        details = []
+        for member in self.board_members:
+            vote = member.vote(decision_type, performance)
+            votes.append(vote)
+            vote_str = "✓ Approved" if vote else "✗ Rejected"
+            details.append(f"{member.name}: {vote_str}")
+        
+        # Majority vote (3 out of 5)
+        approval_count = sum(votes)
+        approved = approval_count >= 3
+        
+        # Build result message
+        vote_summary = f"Board Vote: {approval_count}/5 Approved\n\n" + "\n".join(details)
+        
+        if approved:
+            result_msg = f"✓ APPROVED\n\n{vote_summary}\n\nThe board has approved this decision."
+            # Slight trust boost for good decisions
+            for i, vote in enumerate(votes):
+                if vote:
+                    self.board_members[i].update_trust(1)
+        else:
+            result_msg = f"✗ REJECTED\n\n{vote_summary}\n\nThe board has rejected this decision."
+            # Trust penalty for rejected proposals
+            for member in self.board_members:
+                member.update_trust(-2)
+        
+        return approved, result_msg
+    
+    def get_leaderboard_position(self):
+        """Get player's rank on the Wall Street leaderboard (1 = best)"""
+        all_stocks = [(comp.name, comp.stock_price) for comp in self.competitors]
+        all_stocks.append((self.corp_name or "Your Company", self.stock_price))
+        
+        # Sort by stock price descending
+        all_stocks.sort(key=lambda x: x[1], reverse=True)
+        
+        # Find player position
+        for i, (name, price) in enumerate(all_stocks):
+            if name == (self.corp_name or "Your Company"):
+                return i + 1  # 1-indexed position
+        return len(all_stocks)
+    
+    def check_victory_condition(self):
+        """Check if player has reached #1 on leaderboard"""
+        position = self.get_leaderboard_position()
+        if position == 1 and not self.has_won_game:
+            self.has_won_game = True
+            return True
+        return False
 
     def _update_scenario(self):
         # Only check for new scenario if the current one has expired
@@ -873,6 +1328,105 @@ class Corporation:
         
         return None
 
+    def _check_executive_point_earnings(self):
+        """Award Executive Points for hitting milestones and achievements."""
+        points_earned = 0
+        
+        # Daily earnings for good performance
+        if self.quarterly_revenue > self.quarterly_costs:
+            points_earned += 1  # 1 point per profitable day
+        
+        # Stock price milestones (one-time)
+        stock_milestones = [15, 25, 50, 100, 200, 500]
+        for milestone in stock_milestones:
+            milestone_id = f"stock_{milestone}"
+            if self.stock_price >= milestone and milestone_id not in self.purchased_upgrades:
+                points_earned += 5
+                self.purchased_upgrades.append(milestone_id)  # Mark as achieved
+                self.log.append(f"🎉 MILESTONE: Stock price hit ${milestone}! Earned 5 Executive Points.")
+        
+        # Revenue milestones
+        if self.day % 30 == 0:  # Monthly check
+            monthly_revenue = self.quarterly_revenue / max(1, self.day % 90)
+            if monthly_revenue > 5000000:  # $5M+ monthly
+                points_earned += 3
+        
+        # Customer base milestones
+        customer_milestones = [40, 60, 80, 100]
+        for milestone in customer_milestones:
+            milestone_id = f"customer_{milestone}"
+            if self.customer_base >= milestone and milestone_id not in self.purchased_upgrades:
+                points_earned += 3
+                self.purchased_upgrades.append(milestone_id)
+                self.log.append(f"🎉 MILESTONE: Customer base hit {milestone}%! Earned 3 Executive Points.")
+        
+        if points_earned > 0:
+            self.executive_points += points_earned
+            if points_earned > 1:  # Don't spam for daily 1 point
+                self.log.append(f"✨ Earned {points_earned} Executive Points! Total: {self.executive_points}")
+    
+    def _apply_milestone_stock_boosts(self):
+        """Apply major stock price boosts when key milestones are hit."""
+        stock_boost = 0
+        boost_reason = ""
+        
+        # First Profitability Achievement
+        if self.quarterly_revenue > self.quarterly_costs and "first_profitable" not in self.purchased_upgrades:
+            stock_boost = 0.50  # $0.50 boost
+            boost_reason = "First Profitable Quarter!"
+            self.purchased_upgrades.append("first_profitable")
+            self.log.append("🚀 MAJOR EVENT: First profitable quarter! Stock rallies!")
+        
+        # Revenue thresholds
+        revenue_milestones = {"revenue_10m": (10000000, 0.25), "revenue_50m": (50000000, 0.50), 
+                             "revenue_100m": (100000000, 1.0), "revenue_250m": (250000000, 2.0)}
+        for milestone_id, (threshold, boost) in revenue_milestones.items():
+            if self.quarterly_revenue >= threshold and milestone_id not in self.purchased_upgrades:
+                stock_boost += boost
+                boost_reason = f"Revenue exceeded ${threshold/1000000:.0f}M!"
+                self.purchased_upgrades.append(milestone_id)
+                self.log.append(f"📈 REVENUE MILESTONE: Quarterly revenue hit ${threshold/1000000:.0f}M! Stock surges!")
+                break  # Only trigger one per day
+        
+        # Customer base thresholds
+        if not boost_reason:  # Only if no revenue milestone triggered
+            customer_milestones = {"customer_50": (50, 0.30), "customer_75": (75, 0.60), "customer_100": (100, 1.50)}
+            for milestone_id, (threshold, boost) in customer_milestones.items():
+                if self.customer_base >= threshold and milestone_id not in self.purchased_upgrades:
+                    stock_boost += boost
+                    boost_reason = f"Customer base reached {threshold}%!"
+                    self.purchased_upgrades.append(milestone_id)
+                    self.log.append(f"👥 MARKET MILESTONE: Reached {threshold}% customer base! Stock gains!")
+                    break  # Only trigger one per day
+        
+        # Technology milestones
+        if not boost_reason:
+            tech_milestones = {"tech_50": (50, 0.20), "tech_75": (75, 0.40), "tech_100": (100, 0.80)}
+            for milestone_id, (threshold, boost) in tech_milestones.items():
+                if self.technology_level >= threshold and milestone_id not in self.purchased_upgrades:
+                    stock_boost += boost
+                    boost_reason = f"Tech level reached {threshold}!"
+                    self.purchased_upgrades.append(milestone_id)
+                    self.log.append(f"🔬 TECH MILESTONE: Technology level hit {threshold}! Market excited!")
+                    break  # Only trigger one per day
+        
+        # Project completion boost
+        if not boost_reason and len(self.projects) > 0:
+            launched_count = sum(1 for p in self.projects if p.lifecycle_stage != "Development")
+            project_milestone_id = f"projects_launched_{launched_count}"
+            if launched_count >= 3 and project_milestone_id not in self.purchased_upgrades and "first_launched_project" not in self.purchased_upgrades:
+                stock_boost = 0.35
+                boost_reason = "First project launched!"
+                self.purchased_upgrades.append("first_launched_project")
+                self.log.append("🎯 MILESTONE: First product launched! Stock rallies on momentum!")
+        
+        # Apply the boost
+        if stock_boost > 0:
+            _set(self, 'stock_price', self.stock_price + stock_boost)
+            _set(self, 'market_cap', self.stock_price * self.shares_outstanding)
+            if hasattr(self, 'recent_changes'):
+                self.recent_changes.append(("positive", f"Stock +${stock_boost:.2f} from {boost_reason}"))
+    
     def _execute_employee_actions(self):
         """Execute daily auto-actions for each hired employee."""
         for employee in self.employees:
@@ -885,95 +1439,228 @@ class Corporation:
             else:
                 action_name = random.choice(employee.auto_actions)
             
-            # Success chance based on employee skill level
-            success_chance = 0.5 + (employee.skill_level * 0.25)  # 0.75 to 1.0 for skill 1.0 to 2.0
+            # Success chance based on employee skill level (90-100% for skilled workers)
+            success_chance = 0.85 + (employee.skill_level * 0.10)
             success_chance = min(1.0, success_chance)
             
             if random.random() < success_chance:
-                result = self._perform_employee_ceo_action(employee, action_name)
-                if result:
+                result_msg = self._perform_employee_work(employee, action_name)
+                if result_msg:
                     employee.tasks_completed += 1
-                    employee.skill_level = min(2.0, employee.skill_level + 0.01)  # Skill improves over time
-                    tag = " (assigned)" if employee.assigned_action == action_name else ""
-                    self.automation_log.append(f"Day {self.day}: {employee.name} automated {action_name}{tag}")
+                    employee.skill_level = min(2.0, employee.skill_level + 0.02)  # Skill improves
+                    self.automation_log.append(f"Day {self.day}: {employee.name} ({employee.position}) - {result_msg}")
     
-    def _perform_employee_ceo_action(self, employee, action_name: str) -> bool:
-        """Employee performs a CEO action automatically (no AP cost, uses budget)."""
+    def _perform_employee_work(self, employee, action_name: str) -> str:
+        """Employee performs work and returns detailed description of what they did."""
         try:
             if action_name == "email":
-                # Handle one random email if available
-                if self.email_system and self.email_system.inbox:
-                    email = random.choice(self.email_system.inbox)
-                    # Auto-respond with random choice
-                    if email.choices:
-                        choice = random.choice(email.choices)
-                        self.email_system.respond_to_email(email, choice)
-                        return True
-                return False
+                if self.email_system:
+                    # Each employee assigned to email clears 2 emails per day (safe options)
+                    emails_cleared = 0
+                    for _ in range(2):
+                        try:
+                            result = getattr(self.email_system, 'auto_clear_one_email', None)
+                            if callable(result):
+                                msg = self.email_system.auto_clear_one_email()
+                                if msg is not None:
+                                    emails_cleared += 1
+                            else:
+                                # Fallback: remove first email conservatively
+                                if self.email_system.inbox:
+                                    self.email_system.apply_action(0, 0)
+                                    emails_cleared += 1
+                        except Exception:
+                            # Don't break the employee loop on email errors
+                            pass
+                    if emails_cleared > 0:
+                        return f"Cleared {emails_cleared} emails from inbox"
+                return None
             
             elif action_name == "marketing":
-                # Auto market shift with small budget
-                budget = min(2000000, self.annual_budget.get('Marketing', 0) - self.budget_spent.get('Marketing', 0))
-                if budget > 500000 and self.cash > budget:
-                    # Spend from marketing budget
+                budget = min(1500000, self.annual_budget.get('Marketing', 0) - self.budget_spent.get('Marketing', 0))
+                if budget > 300000:
                     self.budget_spent['Marketing'] = self.budget_spent.get('Marketing', 0) + budget
                     target = "B2B" if self.market_segments["B2B"] < 50 else "Consumer"
-                    self.use_corp_card_or_action("Market_Shift", budget, target_segment=target)
-                    self.log.append(f"[AUTO] {employee.name} ran ${budget:,.0f} marketing campaign for {target}")
-                    return True
-                return False
+                    growth = random.uniform(0.5, 1.5)
+                    self.customer_base = min(100, self.customer_base + growth)
+                    # Reset competitor pressure countdown when marketing occurs
+                    self.days_without_marketing = 0
+                    return f"Ran ${budget/1000000:.1f}M {target} campaign, gained {growth:.1f}% market share"
+                return None
+            
+            elif action_name == "customer_outreach":
+                growth = random.uniform(0.3, 0.8) * employee.skill_level
+                self.customer_base = min(100, self.customer_base + growth)
+                self.reputation = min(100, self.reputation + random.uniform(0.1, 0.3))
+                return f"Customer outreach calls: +{growth:.1f}% customer base, +{random.uniform(0.1, 0.3):.1f} reputation"
             
             elif action_name == "rnd":
-                # Auto-invest in R&D
-                budget = min(1000000, self.annual_budget.get('R&D', 0) - self.budget_spent.get('R&D', 0))
-                if budget > 200000:
+                budget = min(800000, self.annual_budget.get('R&D', 0) - self.budget_spent.get('R&D', 0))
+                if budget > 150000:
                     self.budget_spent['R&D'] = self.budget_spent.get('R&D', 0) + budget
-                    # Pick a random R&D track that isn't maxed
                     available_tracks = [t for t, v in self.technology_tracks.items() if v < 100]
                     if available_tracks:
                         track = random.choice(available_tracks)
-                        points = budget / 100000
+                        points = (budget / 100000) * employee.skill_level
                         self.technology_tracks[track] = min(100, self.technology_tracks[track] + points)
-                        self.log.append(f"[AUTO] {employee.name} invested ${budget:,.0f} in {track}")
-                        return True
-                return False
+                        return f"R&D work on {track}: ${budget/1000:.0f}K spent, +{points:.1f} tech points"
+                return None
+            
+            elif action_name == "innovation":
+                tech_boost = random.uniform(0.5, 1.2) * employee.skill_level
+                self.technology_level = min(100, self.technology_level + tech_boost)
+                return f"Innovation session: developed new tech, +{tech_boost:.1f} tech level"
+
+            elif action_name == "wellness":
+                # Host a CEO wellness session funded from HR budget
+                available_hr_budget = self.annual_budget.get('HR', 0) - self.budget_spent.get('HR', 0)
+                session_cost = 300000  # $300K wellness program
+                if available_hr_budget >= session_cost and self.cash >= session_cost:
+                    self.budget_spent['HR'] = self.budget_spent.get('HR', 0) + session_cost
+                    self.cash -= session_cost
+                    health_gain = random.uniform(6, 12) * employee.skill_level
+                    morale_gain = random.uniform(1, 2)
+                    _set(self, 'ceo_health', min(100, self.ceo_health + health_gain))
+                    _set(self, 'employee_morale', min(100, self.employee_morale + morale_gain))
+                    return f"Wellness session run: CEO health +{health_gain:.1f}, morale +{morale_gain:.1f}"
+                return "Wellness session skipped (insufficient HR budget or cash)"
             
             elif action_name == "budget":
-                # Auto-rebalance budgets if any dept is critically low
-                low_depts = [d for d, b in self.annual_budget.items() if self.get_available_budget(d) < 1000000]
-                if low_depts and self.cash > 5000000:
-                    # Reallocate from cash to low departments
-                    boost_amount = 3000000
-                    for dept in low_depts[:2]:  # Max 2 depts
-                        self.annual_budget[dept] += boost_amount
-                        self.cash -= boost_amount
-                    self.log.append(f"[AUTO] {employee.name} reallocated budgets to {', '.join(low_depts[:2])}")
-                    return True
-                return False
+                low_depts = [d for d in self.annual_budget.keys() if self.get_available_budget(d) < 2000000]
+                if low_depts and self.cash > 3000000:
+                    dept = low_depts[0]
+                    boost = 2000000
+                    self.annual_budget[dept] += boost
+                    self.cash -= boost
+                    return f"Budget reallocation: +${boost/1000000:.1f}M to {dept} department"
+                return "Reviewed budgets, all departments adequately funded"
             
-            elif action_name == "hr":
-                # Auto-boost morale if low
-                if self.employee_morale < 50 and self.cash > 1000000:
-                    budget = min(1000000, self.annual_budget.get('HR', 0) - self.budget_spent.get('HR', 0))
-                    if budget > 200000:
-                        self.budget_spent['HR'] = self.budget_spent.get('HR', 0) + budget
-                        boost = budget / 100000
-                        _set(self, 'employee_morale', min(100, self.employee_morale + boost))
-                        self.log.append(f"[AUTO] {employee.name} ran morale program (+{boost:.1f}%)")
-                        return True
-                return False
+            elif action_name == "cash_management":
+                # Reduce expenses slightly through optimization
+                if random.random() < 0.3:  # 30% chance
+                    savings = random.uniform(50000, 200000) * employee.skill_level
+                    self.cash += savings
+                    return f"Optimized expenses: saved ${savings/1000:.0f}K through process improvements"
+                return "Reviewed financial reports, monitored cash flow"
             
-            return False
+            elif action_name == "efficiency":
+                # Improve operations
+                if random.random() < 0.4:  # 40% chance
+                    cost_reduction = random.uniform(30000, 100000)
+                    self.cash += cost_reduction
+                    return f"Streamlined operations: reduced daily costs by ${cost_reduction/1000:.0f}K"
+                return "Analyzed workflows, identified optimization opportunities"
+            
+            elif action_name == "cost_reduction":
+                savings = random.uniform(40000, 120000) * employee.skill_level
+                self.cash += savings
+                return f"Cost audit: eliminated wasteful spending, saved ${savings/1000:.0f}K"
+            
+            elif action_name == "morale":
+                morale_boost = random.uniform(0.8, 2.0) * employee.skill_level
+                self.employee_morale = min(100, self.employee_morale + morale_boost)
+                return f"Organized team building event: +{morale_boost:.1f} employee morale"
+            
+            elif action_name == "hiring_support":
+                # Small reputation boost from recruitment activities
+                rep_gain = random.uniform(0.2, 0.5)
+                self.reputation = min(100, self.reputation + rep_gain)
+                return f"Screened job candidates, improved employer brand (+{rep_gain:.1f} reputation)"
+            
+            elif action_name == "launch_project":
+                # Project Manager launches a strategic project (carefully - only 30% chance daily)
+                if random.random() > 0.30:
+                    # Most days, they just review and plan
+                    return "Reviewed project pipeline and assessed market opportunities (no launch today)."
+                
+                if self.projects and len(self.projects) >= 5:
+                    # Too many active projects, don't launch more
+                    return f"Portfolio full: {len(self.projects)} projects active. Consider retiring mature ones."
+                
+                # Check if we have sufficient resources (more stringent requirements)
+                available_rnd_budget = self.annual_budget.get('R&D', 0) - self.budget_spent.get('R&D', 0)
+                if available_rnd_budget < 8000000 or self.cash < 15000000:
+                    return "Insufficient R&D budget or cash to launch a new project."
+                
+                # Propose a project based on employee skill and tech gaps
+                project_types = [
+                    (1, "AI Integration Engine", 25000000, 50),
+                    (1, "Cloud Infrastructure Platform", 20000000, 45),
+                    (1, "Advanced Analytics Suite", 18000000, 35),
+                    (2, "Customer Engagement Suite", 15000000, 25),
+                    (3, "Process Automation Framework", 12000000, 15)
+                ]
+                proj_type, proj_name, proj_investment, proj_days = random.choice(project_types)
+                
+                success, msg = self.launch_project(
+                    proj_name,
+                    proj_investment,
+                    base_price=500000,
+                    development_days=proj_days,
+                    project_type=proj_type
+                )
+                
+                if success:
+                    return f"Launched project '{proj_name}': {proj_days}-day dev cycle, ${proj_investment/1000000:.1f}M investment"
+                else:
+                    return f"Project launch blocked: {msg}"
+            
+            return None
+        
         except Exception as e:
-            self.log.append(f"[AUTO ERROR] {employee.name}: {str(e)}")
-            return False
-
+            print(f"Employee work error: {e}")
+            return None
+    
+    def launch_project(self, name, investment, base_price, development_days, project_type):
+        """Launch a unified project (development → market lifecycle)."""
+        # Calculate risk based on duration (faster = riskier)
+        risk = max(0.05, min(0.90, (110 - development_days) / 100))
+        
+        # 10% upfront, 90% debt
+        upfront_cost = investment * 0.1
+        debt_amount = investment * 0.9
+        
+        if self.cash < upfront_cost:
+            return False, f"Insufficient cash. Need ${upfront_cost/1000000:.1f}M upfront."
+        
+        if self.debt + debt_amount > self.max_debt_limit:
+            return False, "Project would exceed debt limit."
+        
+        # Determine budget source
+        budget_dept = {1: 'R&D', 2: 'Marketing', 3: 'Operations'}.get(project_type, 'R&D')
+        if not self.can_afford_action(budget_dept, upfront_cost):
+            return False, f"{budget_dept} budget insufficient."
+        
+        # Create unified project
+        project = Product(name, investment, base_price, development_days, project_type, risk)
+        
+        # Deduct costs
+        self.spend_from_budget(budget_dept, upfront_cost)
+        self.cash -= upfront_cost
+        self.debt += debt_amount
+        
+        self.projects.append(project)
+        self.log.append(f"🎯 Started project '{name}': ${upfront_cost/1000000:.1f}M cash + ${debt_amount/1000000:.1f}M debt. Dev time: {development_days} days")
+        
+        return True, f"Project started! {development_days} days development, then market launch."
+    
+    def retire_product(self, product):
+        """Retire a project from the market."""
+        product.retire()
+        self.log.append(f"Retired project: {product.name}. Total revenue: ${product.total_revenue/1000000:.1f}M")
+    
     def update_day(self):
         self.log.append(f"--- Day {self.day} Begins (Q{self.quarter}, Y{self.year}) ---")
         
-        # RESET ACTION POINTS FOR NEW DAY
-        self.action_points = self.max_action_points
-        self.log.append(f"Daily action points reset to {self.max_action_points}.")
+        # RESET ACTION POINTS FOR NEW DAY (include upgrade bonus)
+        self.action_points = self.max_action_points + self.upgrade_bonuses['action_points_bonus']
+        self.log.append(f"Daily action points reset to {self.action_points}.")
+        
+        # EARN EXECUTIVE POINTS from achievements
+        self._check_executive_point_earnings()
+        
+        # APPLY MILESTONE STOCK BOOSTS (NEW)
+        self._apply_milestone_stock_boosts()
         
         # EXECUTE EMPLOYEE AUTO-ACTIONS
         self._execute_employee_actions()
@@ -984,12 +1671,13 @@ class Corporation:
         self._update_scenario()
         self.calculate_efficiency() # Recalculate efficiencies before costs/projects
         self._generate_revenue()
-        self._process_projects()
+        self._process_projects()  # Handles both development and market phases
         self.process_daily_rnd() # R&D runs after projects/revenue
         self._generate_costs() # Costs run last
         self._update_stock_market()
         self._update_metrics()
         self._update_credit_rating()  # Update credit rating based on debt levels
+        self._update_board_satisfaction()  # Update board member trust and satisfaction
         
         self.day += 1
         

@@ -179,7 +179,7 @@ EARNINGS_QUESTIONS = [
 ]
 
 # EMPLOYEE FACTORY
-def EMPLOYEE_FACTORY(name, employee_type, signing_bonus, daily_salary, skill):
-    """Factory function to create Employee instances."""
+def EMPLOYEE_FACTORY(position, signing_bonus, daily_salary, skill):
+    """Factory function to create Employee instances with random names."""
     from game_core import Employee
-    return Employee(name, employee_type, signing_bonus, daily_salary, skill)
+    return Employee(position, signing_bonus, daily_salary, skill)

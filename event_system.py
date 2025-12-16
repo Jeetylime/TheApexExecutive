@@ -12,6 +12,43 @@ class EmailSystem:
         self.coaching_enabled = True
         self._initialize_starting_email()
 
+    def get_safe_option_index(self, email: dict):
+        """Pick a conservative option for auto-processing emails.
+        Prefers 'Acknowledge', 'Ignore', 'Low Risk', or 'Neutral'. Falls back to first option.
+        """
+        options = email.get('options', [])
+        for idx, opt in enumerate(options):
+            text = str(opt.get('text', '')).lower()
+            if ('acknowledge' in text) or ('ignore' in text) or ('low risk' in text) or ('neutral' in text):
+                return idx
+        return 0 if options else None
+
+    def auto_clear_one_email(self):
+        """Automatically clear one email using a safe option.
+        Returns a short message if an email was processed, else None.
+        """
+        if not self.inbox:
+            return None
+        # Process the first email for determinism
+        email = self.inbox[0]
+        safe_idx = self.get_safe_option_index(email)
+        if safe_idx is None:
+            # No options: archive informational email
+            self.inbox.pop(0)
+            self.corp.log.append("Auto-archived an informational email.")
+            return "Auto-archived one email"
+        try:
+            msg = self.apply_action(0, safe_idx)
+            return msg or "Cleared one email"
+        except Exception as e:
+            # If apply fails, attempt to pop to avoid blocking
+            try:
+                self.inbox.pop(0)
+                self.corp.log.append(f"Auto-archived email due to error: {e}")
+                return "Auto-archived one email"
+            except Exception:
+                return None
+
     def _initialize_starting_email(self):
         """Add a welcome email on day 1."""
         welcome_email = {
@@ -614,12 +651,12 @@ class EmailSystem:
     def _generate_random_event(self):
         """
         Generates a random event based on the specified probabilities:
-        50% chance overall. If occurs: 10% Good, 10% Bad, 80% Neutral.
+        10% chance overall. If occurs: 10% Good, 10% Bad, 80% Neutral.
         
         Returns the event_id if an event is generated, otherwise None.
         """
-        # 50% chance of an event happening
-        if random.random() > 0.50: 
+        # 10% chance of an event happening
+        if random.random() > 0.10: 
             return None 
         
         event_roll = random.random()

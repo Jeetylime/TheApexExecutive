@@ -6,7 +6,7 @@ import random
 import sys
 import os 
 import config 
-from game_core import Corporation, Project
+from game_core import Corporation
 from event_system import EmailSystem
 from collections import deque # Added import for MockCorporation
 
@@ -20,7 +20,11 @@ class CEOGameApp:
     def __init__(self, master):
         self.master = master
         master.title("CEO: The Apex Executive Simulator")
-        master.geometry("1500x950")
+        master.geometry("1700x1050")  # Adjusted from 1920x1200
+        
+        # Cleanup tracking
+        self.is_running = True
+        self.scheduled_callbacks = []  # Track all after() callbacks for cleanup
         
         # Load a reusable app icon (PNG/GIF). Place your file at assets/app_icon.png
         self.app_icon = None
@@ -35,8 +39,11 @@ class CEOGameApp:
         self.game = Corporation()
         # Initialize email system after game
         self.game.email_system = EmailSystem(self.game) 
-        # UI scale (1.0 = default). Settings slider will update this.
-        self.ui_scale = 1.0
+        # UI scale - adjusted from 1.15 to 1.08
+        self.ui_scale = 1.08
+        
+        # Apply UI scaling
+        ctk.set_widget_scaling(self.ui_scale)
         
         self._setup_initial_dialog()
         self._setup_main_ui()
@@ -52,6 +59,9 @@ class CEOGameApp:
         
         # Bind hotkeys
         self._setup_hotkeys()
+        
+        # Set up cleanup handler
+        master.protocol("WM_DELETE_WINDOW", self._on_closing)
 
     def _fmt_pct(self, value):
         try:
@@ -94,6 +104,14 @@ class CEOGameApp:
             "☁️ Cloud computing market expands to $500B",
             "📡 5G infrastructure rollout ahead of schedule",
             "💊 Healthcare costs stabilize for first time in decade"
+            "Batman launches new line of tech gadgets"
+            "🎨 Art world embraces AI-generated masterpieces"
+            "clock on the wall strikes thirteen"
+            "spring break becomes national holiday"
+            "Check Apex Exectuive out on github!"
+            "pizza is now considered a vegetable"
+            
+            
         ]
         
         # Mix headlines: 2 company-specific, 6 general
@@ -103,17 +121,27 @@ class CEOGameApp:
     
     def _update_ticker(self):
         """Rotate through headlines every 4 seconds."""
-        if self.ticker_headlines:
-            headline = self.ticker_headlines[self.ticker_index]
-            self.ticker_label.configure(text=headline)
-            self.ticker_index = (self.ticker_index + 1) % len(self.ticker_headlines)
+        # Don't update if app is closing
+        if not self.is_running:
+            return
             
-            # Regenerate headlines every full cycle
-            if self.ticker_index == 0:
-                self._generate_ticker_headlines()
-        
-        # Schedule next update
-        self.master.after(4000, self._update_ticker)
+        try:
+            if self.ticker_headlines and hasattr(self, 'ticker_label'):
+                headline = self.ticker_headlines[self.ticker_index]
+                self.ticker_label.configure(text=headline)
+                self.ticker_index = (self.ticker_index + 1) % len(self.ticker_headlines)
+                
+                # Regenerate headlines every full cycle
+                if self.ticker_index == 0:
+                    self._generate_ticker_headlines()
+            
+            # Schedule next update only if still running
+            if self.is_running:
+                callback_id = self.master.after(4000, self._update_ticker)
+                self.scheduled_callbacks.append(callback_id)
+        except Exception:
+            # Silently ignore errors during shutdown
+            pass
     
     def _load_saved_theme(self):
         """Load and apply saved theme preference on startup."""
@@ -243,16 +271,15 @@ class CEOGameApp:
     
     def _setup_hotkeys(self):
         """Setup keyboard shortcuts for faster gameplay"""
-        # Number keys 1-9 for CEO actions
+        # Number keys 1-8 for CEO actions
         self.master.bind('1', lambda e: self._open_email_dialog())
-        self.master.bind('2', lambda e: self._open_debt_equity_dialog())
-        self.master.bind('3', lambda e: self._open_market_shift_dialog())
-        self.master.bind('4', lambda e: self._open_budget_dialog())
-        self.master.bind('5', lambda e: self._open_rnd_dialog())
-        self.master.bind('6', lambda e: self._open_expense_dialog())
-        self.master.bind('7', lambda e: self._open_ma_dialog())
-        self.master.bind('8', lambda e: self._open_exec_team_dialog())
-        self.master.bind('9', lambda e: self._open_union_dialog())
+        self.master.bind('2', lambda e: self._open_innovation_hub())
+        self.master.bind('3', lambda e: self._open_budget_dialog())
+        self.master.bind('4', lambda e: self._open_debt_equity_dialog())
+        self.master.bind('5', lambda e: self._open_hr_dialog())
+        self.master.bind('6', lambda e: self._open_market_shift_dialog())
+        self.master.bind('7', lambda e: self._open_expense_dialog())
+        self.master.bind('8', lambda e: self._open_union_dialog())
         
         # Space or Enter for Advance Day
         self.master.bind('<space>', lambda e: self._advance_day())
@@ -353,9 +380,10 @@ class CEOGameApp:
         password_window.attributes('-topmost', True)
         password_window.grab_set()
         password_window.resizable(False, False)
+        password_window.configure(fg_color="#0F1724")
         self._set_window_icon(password_window)
         
-        ctk.CTkLabel(password_window, text="🔐 Developer Mode", font=config.FONT_TITLE, text_color=config.COLOR_GOLD).pack(pady=15)
+        ctk.CTkLabel(password_window, text="Developer Mode", font=config.FONT_TITLE, text_color=config.COLOR_GOLD).pack(pady=15)
         ctk.CTkLabel(password_window, text="Enter password:", font=config.FONT_HEADER).pack(pady=10)
         
         password_entry = ctk.CTkEntry(password_window, width=250, font=config.FONT_BODY, show="•")
@@ -364,7 +392,7 @@ class CEOGameApp:
         result = {"authenticated": False}
         
         def check_password():
-            if password_entry.get() == "wavyarms44":
+            if password_entry.get() == "iansucksass":
                 result["authenticated"] = True
                 password_window.destroy()
             else:
@@ -462,20 +490,21 @@ class CEOGameApp:
     def _show_priorities_window(self):
         """Display the priorities/alerts dashboard."""
         dashboard = ctk.CTkToplevel(self.master)
-        dashboard.title("📊 Daily Priorities & Alerts")
+        dashboard.title("Daily Priorities & Alerts")
         dashboard.geometry("600x500")
         dashboard.attributes('-topmost', True)
         dashboard.grab_set()
+        dashboard.configure(fg_color="#0F1724")
         self._set_window_icon(dashboard)
         
         # Header
-        header_frame = ctk.CTkFrame(dashboard, fg_color=config.COLOR_HEADER_BG, corner_radius=0)
+        header_frame = ctk.CTkFrame(dashboard, fg_color="#1B2A39", corner_radius=0)
         header_frame.pack(fill=ctk.X)
-        ctk.CTkLabel(header_frame, text=f"📊 {self.game.corp_name} - Daily Priorities", 
+        ctk.CTkLabel(header_frame, text=f"{self.game.corp_name} - Daily Priorities", 
                      font=config.FONT_TITLE, text_color=config.COLOR_ACCENT_PRIMARY).pack(pady=15, padx=20)
         
         # Scrollable content area
-        scroll_frame = ctk.CTkScrollableFrame(dashboard, fg_color=config.COLOR_PANEL_BG, corner_radius=0)
+        scroll_frame = ctk.CTkScrollableFrame(dashboard, fg_color="#0F1724", corner_radius=0)
         scroll_frame.pack(fill=ctk.BOTH, expand=True, padx=0, pady=0)
         
         # Get alerts
@@ -504,10 +533,10 @@ class CEOGameApp:
                         font=config.FONT_HEADER, text_color=config.COLOR_SUCCESS_GREEN).pack(pady=30)
         
         # Tips section
-        tips_frame = ctk.CTkFrame(scroll_frame, fg_color=("#34495E"), corner_radius=10)
+        tips_frame = ctk.CTkFrame(scroll_frame, fg_color="#1B2A39", corner_radius=10, border_width=1, border_color="#0F1724")
         tips_frame.pack(fill=ctk.X, padx=15, pady=15)
         
-        ctk.CTkLabel(tips_frame, text="💡 Tips for Today", font=(config.FONT_FAMILY, 12, "bold"), 
+        ctk.CTkLabel(tips_frame, text="Tips for Today", font=(config.FONT_FAMILY, 12, "bold"), 
                     text_color=config.COLOR_GOLD).pack(anchor='w', padx=15, pady=(12, 8))
         
         tips = [
@@ -628,15 +657,19 @@ class CEOGameApp:
         # Create custom dialog with developer mode button
         dialog = ctk.CTkToplevel(self.master)
         dialog.title("Company Setup")
-        dialog.geometry("500x350")
+        dialog.geometry("550x500")
         dialog.attributes('-topmost', True)
         dialog.grab_set()
+        dialog.configure(fg_color="#0F1724")
         self._set_window_icon(dialog)
         
         ctk.CTkLabel(dialog, text="Welcome to CEO Simulator", font=config.FONT_TITLE, text_color=config.COLOR_ACCENT_PRIMARY).pack(pady=20)
         
+        # Difficulty selection removed: game now runs on Easy-only
+        difficulty_var = tk.StringVar(value="Easy")
+        
         # Corporation name input
-        ctk.CTkLabel(dialog, text="Corporation Name:", font=config.FONT_HEADER).pack(pady=(10, 5))
+        ctk.CTkLabel(dialog, text="Corporation Name:", font=config.FONT_HEADER).pack(pady=(15, 5))
         corp_entry = ctk.CTkEntry(dialog, width=300, font=config.FONT_BODY, placeholder_text="Enter your corporation name")
         corp_entry.pack(pady=5)
         
@@ -649,18 +682,22 @@ class CEOGameApp:
         def start_game():
             corp_name = corp_entry.get().strip()
             ceo_name = ceo_entry.get().strip()
+            selected_difficulty = "Easy"
             
             if not corp_name or not ceo_name:
-                self.game.set_identity("Global Dynamics", "Anonymous CEO", self.game.email_system)
+                self.game.set_identity("Global Dynamics", "Anonymous CEO", self.game.email_system, selected_difficulty)
             else:
-                self.game.set_identity(corp_name, ceo_name, self.game.email_system)
+                self.game.set_identity(corp_name, ceo_name, self.game.email_system, selected_difficulty)
+            
+            # Log difficulty
+            self.game.log.append(f"Game started on {selected_difficulty} difficulty.")
             dialog.destroy()
         
         # Developer mode button
         def enable_dev_mode():
             # Prompt for password
             if self._prompt_dev_password():
-                self.game.set_identity("DevCorp", "Debug CEO", self.game.email_system)
+                self.game.set_identity("DevCorp", "Debug CEO", self.game.email_system, "Easy")
                 self._enable_developer_mode()
                 dialog.destroy()
         
@@ -669,7 +706,7 @@ class CEOGameApp:
                       font=config.FONT_HEADER, width=200, height=40).pack(pady=20)
         
         # Developer mode button (bottom right corner)
-        dev_btn = ctk.CTkButton(dialog, text="🛠️ Developer Mode", command=enable_dev_mode,
+        dev_btn = ctk.CTkButton(dialog, text="Developer Mode", command=enable_dev_mode,
                                fg_color=config.COLOR_GOLD, hover_color=("#D4AF37"),
                                font=config.FONT_BODY, width=140, height=30)
         dev_btn.place(relx=1.0, rely=1.0, x=-10, y=-10, anchor='se')
@@ -696,13 +733,14 @@ class CEOGameApp:
         tutorial_window.resizable(False, False)
         tutorial_window.attributes('-topmost', True)
         tutorial_window.grab_set()
+        tutorial_window.configure(fg_color="#0F1724")
         self._set_window_icon(tutorial_window)
 
-        ctk.CTkLabel(tutorial_window, text="🎓 Interactive Tutorial", 
+        ctk.CTkLabel(tutorial_window, text="Interactive Tutorial", 
                      font=config.FONT_TITLE, text_color=config.COLOR_ACCENT_PRIMARY).pack(pady=15)
         
         # Step content frame
-        content_frame = ctk.CTkFrame(tutorial_window, fg_color=config.COLOR_PANEL_BG, corner_radius=12)
+        content_frame = ctk.CTkFrame(tutorial_window, fg_color="#1B2A39", corner_radius=12, border_width=1, border_color="#0F1724")
         content_frame.pack(fill='both', expand=True, padx=20, pady=(0, 15))
         
         # Tutorial steps with actual UI element references
@@ -733,7 +771,7 @@ class CEOGameApp:
             },
             {
                 "title": "Step 4: Daily Actions (Center)",
-                "text": "These are your CEO powers. Each costs 1 action point:\n\n📧 Executive Inbox - Handle emails (FREE)\n🔬 R&D Lab - Invest in tech\n💰 Budgets - Reallocate funding\n💳 Debt/Equity - Borrow or raise money\n🏢 Acquisitions & HR - Acquire companies and hire employees\n📊 Market Shift - Target B2B or Consumer\n💼 Corporate Card - One-time expenses\n👔 Executive Team - Hire C-suite (CFO/CTO/CMO)\n🪧 Union Relations - Negotiate with unions",
+                "text": "These are your CEO powers. Each costs 1 action point:\n\n📧 Executive Inbox - Handle emails (FREE)\n🔬 R&D Lab - Invest in tech\n💰 Budgets - Reallocate funding\n💳 Debt/Equity - Borrow or raise money\n🏢 Acquisitions & HR - Acquire companies and hire employees\n📊 Market Shift - Target B2B or Consumer\n💼 Corporate Card - One-time expenses\n🪧 Union Relations - Negotiate with unions",
                 "highlight": "action_frame",
                 "pointer": "↓"
             },
@@ -751,13 +789,13 @@ class CEOGameApp:
             },
             {
                 "title": "Step 7: Employees & Executives",
-                "text": "EMPLOYEES (HR):\n• Pay signing bonus + daily salary\n• Automate routine tasks\n• Boost department efficiency\n• Costs 1 action point to hire\n\nEXECUTIVES (Executive Team):\n• CFO: Cash bonuses, debt cost reduction\n• CTO: Tech boosts, R&D efficiency\n• CMO: Customer growth, marketing power\n• Costs 1 action point to hire\n\nHire strategically!",
+                "text": "EMPLOYEES (HR):\n• Pay signing bonus + daily salary\n• Automate routine tasks\n• Boost department efficiency\n• Costs 1 action point to hire\n\nHire strategically to boost your operations!",
                 "highlight": None,
                 "pointer": None
             },
             {
                 "title": "Step 8: Credit Rating & Debt",
-                "text": "CREDIT RATING (displayed on left panel):\n• AAA/AA/A = Investment Grade (3-5% interest)\n• BBB/BB = Moderate (6-8% interest)\n• B/CCC = Junk (11-15% interest)\n\nRating based on debt-to-equity ratio:\n• High debt = Rating downgrades\n• Downgrades hurt stock price & increase interest\n• Upgrades boost stock price\n\nManage debt carefully!",
+                "text": "CREDIT RATING (displayed on left panel):\n• AAA/AA/A = Investment Grade (3-5% interest)\n• BBB/BB = Moderate (6-8% interest)\n• B/CCC = Junk (14-20% interest)\n\nRating requirements (STRICT):\n• AAA: <5% debt/equity + 15% cash reserves + profitable\n• AA: <15% debt/equity + 10% cash reserves\n• A: <30% debt/equity + positive cash\n\nHigh ratings are HARD to achieve!\nManage debt carefully!",
                 "highlight": None,
                 "pointer": None
             },
@@ -794,8 +832,8 @@ class CEOGameApp:
         progress_label.pack(pady=(0, 15))
         
         # Navigation buttons
-        btn_frame = ctk.CTkFrame(tutorial_window, fg_color="transparent")
-        btn_frame.pack(pady=(0, 15))
+        btn_frame = ctk.CTkFrame(tutorial_window, fg_color="#0F1724")
+        btn_frame.pack(pady=(0, 15), padx=20, fill='x')
         
         def show_step(step_num):
             self.tutorial_step = step_num
@@ -894,15 +932,12 @@ class CEOGameApp:
             except Exception:
                 pass
             
-            # Main action buttons
+            # Key quick buttons
             try:
                 self.btn_email.configure(font=header_font, height=scaled_button_height, width=scaled_button_width)
-                self.btn_rnd.configure(font=header_font, height=scaled_button_height, width=scaled_button_width)
-                self.btn_budget.configure(font=header_font, height=scaled_button_height, width=scaled_button_width)
-                self.btn_debt.configure(font=header_font, height=scaled_button_height, width=scaled_button_width)
-                self.btn_hr.configure(font=header_font, height=scaled_button_height, width=scaled_button_width)
-                self.btn_market.configure(font=header_font, height=scaled_button_height, width=scaled_button_width)
                 self.btn_card.configure(font=header_font, height=scaled_button_height, width=scaled_button_width)
+                self.btn_union.configure(font=header_font, height=scaled_button_height, width=scaled_button_width)
+                self.btn_budget.configure(font=header_font, height=scaled_button_height, width=scaled_button_width)
             except Exception:
                 pass
             
@@ -974,18 +1009,18 @@ class CEOGameApp:
         right_header = ctk.CTkFrame(self.header_frame, fg_color="transparent")
         right_header.pack(side=ctk.RIGHT, padx=20, pady=10)
         
-        self.btn_settings = ctk.CTkButton(right_header, text="⚙️ Settings", command=self._open_settings_dialog, 
+        self.btn_settings = ctk.CTkButton(right_header, text="● Settings", command=self._open_settings_dialog, 
                           fg_color=config.COLOR_ACCENT_NEUTRAL, hover_color=("#555555"), 
                           text_color=config.COLOR_TEXT, font=config.FONT_BODY, width=120)
         self.btn_settings.pack(side=ctk.LEFT, padx=5)
         
 
-        self.btn_load = ctk.CTkButton(self.header_frame, text="📂 Load", command=self._load_game_dialog, 
+        self.btn_load = ctk.CTkButton(self.header_frame, text="● Load", command=self._load_game_dialog, 
                           fg_color=config.COLOR_ACCENT_PRIMARY, hover_color=("#4169E1"), 
                           text_color=config.COLOR_TEXT, font=config.FONT_HEADER)
         self.btn_load.pack(side=ctk.RIGHT, padx=10, pady=10)
         
-        self.btn_save = ctk.CTkButton(self.header_frame, text="💾 Save", command=self._save_game_dialog, 
+        self.btn_save = ctk.CTkButton(self.header_frame, text="● Save", command=self._save_game_dialog, 
                           fg_color=config.COLOR_SUCCESS_GREEN, hover_color=("#228B22"), 
                           text_color=config.COLOR_TEXT, font=config.FONT_HEADER)
         self.btn_save.pack(side=ctk.RIGHT, padx=10, pady=10)
@@ -997,146 +1032,139 @@ class CEOGameApp:
         self.main_frame = ctk.CTkFrame(self.master, fg_color="transparent")
         self.main_frame.pack(fill=ctk.BOTH, expand=True, padx=10, pady=10)
 
-        # Left Panel (Status/Metrics)
-        self.status_frame = ctk.CTkFrame(self.main_frame, fg_color=config.COLOR_PANEL_BG, corner_radius=10)
-        self.status_frame.pack(side=ctk.LEFT, fill=ctk.Y, padx=(0, 10))
+        # Left Panel (Status/Metrics) - scrollable for smaller screens
+        self.status_frame = ctk.CTkScrollableFrame(
+            self.main_frame,
+            fg_color=config.COLOR_PANEL_BG,
+            corner_radius=10,
+            width=300,
+            scrollbar_button_color="#3A506B",
+            scrollbar_button_hover_color="#5A7A9B",
+        )
+        self.status_frame.pack(side=ctk.LEFT, fill=ctk.Y, expand=False, padx=(0, 10))
+        self.status_frame._parent_canvas.configure(yscrollincrement=5)
         
-        # Right Panel (Actions and Log)
+        # Right Panel (Actions and Log) - fixed (no scrolling)
         self.right_frame = ctk.CTkFrame(self.main_frame, fg_color="transparent")
         self.right_frame.pack(side=ctk.RIGHT, fill=ctk.BOTH, expand=True)
         
+        # Initialize ticker state
+        self.ticker_headlines = []
+        self.ticker_index = 0
+
         # 1. Top Row Container (Action Panel + Budgets/Action Points)
         self.top_row_container = ctk.CTkFrame(self.right_frame, fg_color="transparent")
         self.top_row_container.pack(side=ctk.TOP, fill=ctk.X, pady=(0, 10))
         
         # 1a. Action Panel Content (LEFT side of top row)
-        self.action_frame = ctk.CTkFrame(self.top_row_container, fg_color=config.COLOR_PANEL_BG, corner_radius=10)
+        self.action_frame = ctk.CTkFrame(
+            self.top_row_container,
+            fg_color="#1B2A39",
+            corner_radius=12,
+            border_width=1,
+            border_color="#0F1724",
+        )
         self.action_frame.pack(side=ctk.LEFT, fill=ctk.BOTH, expand=True, padx=(0, 10))
         ctk.CTkLabel(self.action_frame, text="DAILY CEO ACTIONS", font=config.FONT_TITLE, text_color=config.COLOR_ACCENT_PRIMARY).pack(pady=10)
         
-        btn_config = {'fg_color': config.COLOR_ACCENT_PRIMARY, 'hover_color': ("#4A90E2"), 'text_color': config.COLOR_PANEL_BG, 'font': config.FONT_HEADER, 'width': 220, 'height': 48, 'corner_radius': 12}
-        
-        # Button Group 1
-        button_frame_1 = ctk.CTkFrame(self.action_frame, fg_color="transparent")
-        button_frame_1.pack(fill=ctk.X, pady=5, padx=10)
-        self.btn_email = ctk.CTkButton(button_frame_1, text="1. 📧 Executive Inbox", command=self._open_email_dialog, **btn_config); self.btn_email.pack(side=ctk.LEFT, padx=8)
-        self._create_tooltip(self.btn_email, "Handle incoming emails. No action point cost. May require cash/budget.")
-        
-        self.btn_rnd = ctk.CTkButton(button_frame_1, text="2. R&D Lab & Projects", command=self._open_rnd_dialog, **btn_config); self.btn_rnd.pack(side=ctk.LEFT, padx=8)
-        self._create_tooltip(self.btn_rnd, "Invest in R&D tracks or start strategic projects. Costs 1 action point.")
-        
-        self.btn_budget = ctk.CTkButton(button_frame_1, text="3. Adjust Budgets", command=self._open_budget_dialog, **btn_config); self.btn_budget.pack(side=ctk.LEFT, padx=8)
-        self._create_tooltip(self.btn_budget, "Reallocate annual department budgets. Costs 1 action point.")
-        
-        # Button Group 2
-        button_frame_2 = ctk.CTkFrame(self.action_frame, fg_color="transparent")
-        button_frame_2.pack(fill=ctk.X, pady=5, padx=10)
-        self.btn_debt = ctk.CTkButton(button_frame_2, text="4. Manage Debt/Equity", command=self._open_debt_equity_dialog, **btn_config); self.btn_debt.pack(side=ctk.LEFT, padx=8)
-        self._create_tooltip(self.btn_debt, "Borrow or repay debt, issue/repurchase shares. Costs 1 action point + cash.")
-        
-        self.btn_hr = ctk.CTkButton(button_frame_2, text="5. Acquisitions & HR", command=self._open_hr_dialog, **btn_config); self.btn_hr.pack(side=ctk.LEFT, padx=8)
-        self._create_tooltip(self.btn_hr, "Acquire companies and hire employees. Costs 1 action point + budget + cash.")
-        
-        self.btn_market = ctk.CTkButton(button_frame_2, text="6. Shift Market Focus", command=self._open_market_shift_dialog, **btn_config); self.btn_market.pack(side=ctk.LEFT, padx=8)
-        self._create_tooltip(self.btn_market, "Shift focus to B2B or Consumer. Costs 1 action point + campaign budget.")
+        # Inline Card Grid becomes primary action surface
+        self._build_card_grid_main()
 
-        # Button Group 3
-        button_frame_3 = ctk.CTkFrame(self.action_frame, fg_color="transparent")
-        button_frame_3.pack(fill=ctk.X, pady=5, padx=10)
-        self.btn_card = ctk.CTkButton(button_frame_3, text="7. Corporate Card", command=self._open_expense_dialog, **btn_config); self.btn_card.pack(side=ctk.LEFT, padx=8)
-        self._create_tooltip(self.btn_card, "Charge expenses to corp card (limit $10M/day). Costs 1 action point.")
-        
-        self.btn_exec_team = ctk.CTkButton(button_frame_3, text="8. 👔 Executive Team", command=self._open_exec_team_dialog, **btn_config); self.btn_exec_team.pack(side=ctk.LEFT, padx=8)
-        self._create_tooltip(self.btn_exec_team, "Hire C-suite officers (CFO/CTO/CMO) for strategic bonuses. Costs 1 action point + hiring fee.")
-        
-        self.btn_union = ctk.CTkButton(button_frame_3, text="9. 🪧 Union Relations", command=self._open_union_dialog, **btn_config); self.btn_union.pack(side=ctk.LEFT, padx=8)
-        self._create_tooltip(self.btn_union, "Negotiate with unions if employees organize. No action point cost.")
-
-        # Employee Task Assignment (does not cost an action)
-        ctk.CTkButton(self.action_frame, text="Assign Employee Tasks", command=self._open_employee_tasks_dialog,
-                  fg_color=config.COLOR_ACCENT_NEUTRAL, hover_color=("#A0A0A0"),
-                  text_color=config.COLOR_TEXT, font=config.FONT_HEADER, height=42).pack(fill=ctk.X, padx=12, pady=(6, 6))
-        
-        # FIRST-DAY CHECKLIST (only shows on Day 1-3)
-        self.checklist_frame = ctk.CTkFrame(self.action_frame, fg_color=("#2E4053"), corner_radius=8)
-        self.checklist_frame.pack(fill='x', padx=12, pady=(8, 6))
-        self.checklist_label = ctk.CTkLabel(self.checklist_frame, text="", font=config.FONT_BODY, text_color=config.COLOR_GOLD, anchor='w', justify='left', wraplength=800)
-        self.checklist_label.pack(padx=10, pady=8)
-        
         # 1b. Budgets & Action Points Panel (RIGHT side of top row)
-        self.info_panel = ctk.CTkFrame(self.top_row_container, fg_color=config.COLOR_PANEL_BG, corner_radius=10, width=340)
+        self.info_panel = ctk.CTkFrame(
+            self.top_row_container,
+            fg_color="#1B2A39",
+            corner_radius=12,
+            border_width=1,
+            border_color="#0F1724",
+            width=360,
+        )
         # Let contents determine height so the employee panel is visible
         self.info_panel.pack(side=ctk.RIGHT, fill=ctk.Y, expand=False)
-        
+
+        # Advance Day Button (top of sidebar)
+        self.advance_button = ctk.CTkButton(
+            self.info_panel,
+            text="ADVANCE DAY >>",
+            command=self._advance_day,
+            height=60,
+            fg_color=config.COLOR_SUCCESS_GREEN,
+            hover_color=("#4CAF50"),
+            text_color=config.COLOR_PANEL_BG,
+            font=config.FONT_TITLE,
+            corner_radius=8,
+        )
+        self.advance_button.pack(fill='x', padx=12, pady=(12, 8))
+
         # Action Points Display
-        self.action_points_frame = ctk.CTkFrame(self.info_panel, fg_color=("#2E4053"), corner_radius=8)
-        self.action_points_frame.pack(fill='x', padx=10, pady=(10, 5))
-        ctk.CTkLabel(self.action_points_frame, text="⚡ DAILY ACTIONS", font=config.FONT_HEADER, text_color=config.COLOR_GOLD).pack(pady=(5, 0))
+        self.action_points_frame = ctk.CTkFrame(
+            self.info_panel,
+            fg_color="#16202D",
+            corner_radius=10,
+            border_width=1,
+            border_color="#0F1724",
+        )
+        self.action_points_frame.pack(fill='x', padx=12, pady=(0, 8))
+        ctk.CTkLabel(self.action_points_frame, text="● DAILY ACTIONS", font=config.FONT_HEADER, text_color=config.COLOR_GOLD).pack(pady=(8, 4))
         self.action_points_label = ctk.CTkLabel(self.action_points_frame, text="3 / 3", font=(config.FONT_FAMILY, 28, "bold"), text_color=config.COLOR_SUCCESS_GREEN)
-        self.action_points_label.pack(pady=(0, 5))
-        
+        self.action_points_label.pack(pady=(0, 10))
+
         # Marketing Pressure Display
-        self.marketing_frame = ctk.CTkFrame(self.info_panel, fg_color=("#34495E"), corner_radius=8)
-        self.marketing_frame.pack(fill='x', padx=10, pady=(5, 5))
-        ctk.CTkLabel(self.marketing_frame, text="📊 MARKET DEFENSE", font=(config.FONT_FAMILY, 10, "bold"), text_color=config.COLOR_ACCENT_NEUTRAL).pack(pady=(5, 2))
+        self.marketing_frame = ctk.CTkFrame(
+            self.info_panel,
+            fg_color="#16202D",
+            corner_radius=10,
+            border_width=1,
+            border_color="#0F1724",
+        )
+        self.marketing_frame.pack(fill='x', padx=12, pady=(0, 10))
+        ctk.CTkLabel(self.marketing_frame, text="● MARKET DEFENSE", font=(config.FONT_FAMILY, 10, "bold"), text_color=config.COLOR_ACCENT_NEUTRAL).pack(pady=(8, 2))
         self.marketing_counter_label = ctk.CTkLabel(self.marketing_frame, text="Last marketing: 0 days ago", font=config.FONT_BODY, text_color=config.COLOR_SUCCESS_GREEN)
-        self.marketing_counter_label.pack(pady=(0, 5))
-        
+        self.marketing_counter_label.pack(pady=(0, 10))
+
         # Department Budgets Display
-        ctk.CTkLabel(self.info_panel, text="DEPT BUDGETS", font=config.FONT_HEADER, text_color='#F39C12').pack(fill='x', pady=(10, 5), padx=10)
+        ctk.CTkLabel(self.info_panel, text="DEPT BUDGETS", font=config.FONT_HEADER, text_color='#F39C12').pack(fill='x', pady=(4, 6), padx=14)
         self.budget_labels = {}
         for dept in ['R&D', 'Marketing', 'Operations', 'HR']:
-            frame = ctk.CTkFrame(self.info_panel, fg_color=("#34495E"), corner_radius=6)
-            frame.pack(fill='x', padx=10, pady=3)
+            frame = ctk.CTkFrame(
+                self.info_panel,
+                fg_color="#16202D",
+                corner_radius=10,
+                border_width=1,
+                border_color="#0F1724",
+            )
+            frame.pack(fill='x', padx=12, pady=4)
             dept_label = ctk.CTkLabel(frame, text=f"{dept}:", font=config.FONT_BODY, anchor='w', width=80, text_color=config.COLOR_TEXT)
-            dept_label.pack(side=ctk.LEFT, padx=(8, 5))
+            dept_label.pack(side=ctk.LEFT, padx=(12, 6), pady=8)
             
-            budget_value = ctk.CTkLabel(frame, text="", font=(config.FONT_FAMILY, 11), anchor='w', text_color=config.COLOR_TEXT)
-            budget_value.pack(side=ctk.LEFT, fill='x', expand=True, padx=(0, 8))
+            budget_value = ctk.CTkLabel(frame, text="", font=(config.FONT_FAMILY, 11, "bold"), anchor='w', text_color=config.COLOR_TEXT)
+            budget_value.pack(side=ctk.LEFT, fill='x', expand=True, padx=(0, 12))
             self.budget_labels[dept] = budget_value
 
         # Employees Panel
-        emp_panel = ctk.CTkFrame(self.info_panel, fg_color=("#2E4053"), corner_radius=8)
-        emp_panel.pack(fill='both', padx=10, pady=(10, 8), expand=True)
-        ctk.CTkLabel(emp_panel, text="EMPLOYEES", font=config.FONT_HEADER, text_color=config.COLOR_ACCENT_PRIMARY).pack(pady=(6, 2))
+        emp_panel = ctk.CTkFrame(
+            self.info_panel,
+            fg_color="#16202D",
+            corner_radius=12,
+            border_width=1,
+            border_color="#0F1724",
+        )
+        emp_panel.pack(fill='both', padx=12, pady=(10, 10), expand=True)
+        ctk.CTkLabel(emp_panel, text="EMPLOYEES", font=config.FONT_HEADER, text_color=config.COLOR_ACCENT_PRIMARY).pack(pady=(8, 4))
         self.employee_summary_label = ctk.CTkLabel(emp_panel, text="0 employees", font=config.FONT_BODY, text_color=config.COLOR_TEXT)
         self.employee_summary_label.pack()
 
-        self.employee_list_frame = ctk.CTkScrollableFrame(emp_panel, fg_color=("#34495E"), height=140)
-        self.employee_list_frame.pack(fill='x', padx=8, pady=(4, 8))
+        self.employee_list_frame = ctk.CTkScrollableFrame(emp_panel, fg_color="#0F1724", height=140, scrollbar_button_color="#3A506B", scrollbar_button_hover_color="#5A7A9B")
+        self.employee_list_frame.pack(fill='x', padx=10, pady=(6, 10))
+        self.employee_list_frame._parent_canvas.configure(yscrollincrement=5)
 
         ctk.CTkLabel(emp_panel, text="Automation Log", font=config.FONT_BODY, text_color=config.COLOR_ACCENT_NEUTRAL).pack()
         self.automation_log_box = ctk.CTkTextbox(emp_panel, height=90, state=ctk.DISABLED, wrap='word',
-                                               font=config.FONT_MONO, fg_color=("#3E4E60"), text_color=config.COLOR_TEXT,
-                                               border_width=0, corner_radius=6)
-        self.automation_log_box.pack(fill='both', expand=False, padx=8, pady=(2, 6))
+                                               font=config.FONT_BODY, fg_color="#0F1724", text_color=config.COLOR_TEXT,
+                                               border_width=0, corner_radius=8)
+        self.automation_log_box.pack(fill='both', expand=False, padx=10, pady=(0, 10))
         
-        # News Ticker and Advance Day Container
-        ticker_container = ctk.CTkFrame(self.right_frame, fg_color="transparent")
-        ticker_container.pack(side=ctk.TOP, fill=ctk.X, pady=(10, 0))
         
-        # News Ticker Panel (left side, takes most space)
-        self.ticker_frame = ctk.CTkFrame(ticker_container, fg_color=("#1C2833"), corner_radius=10, height=60)
-        self.ticker_frame.pack(side=ctk.LEFT, fill=ctk.BOTH, expand=True, padx=(0, 10))
-        self.ticker_frame.pack_propagate(False)
-        
-        ctk.CTkLabel(self.ticker_frame, text="📰 MARKET NEWS", font=(config.FONT_FAMILY, 10, "bold"), 
-                    text_color=config.COLOR_GOLD).pack(side=ctk.LEFT, padx=10)
-        
-        self.ticker_label = ctk.CTkLabel(self.ticker_frame, text="", font=config.FONT_BODY, 
-                                         text_color=config.COLOR_TEXT, anchor='w')
-        self.ticker_label.pack(side=ctk.LEFT, fill=ctk.X, expand=True, padx=10)
-        
-        # Advance Day Button (right side)
-        self.advance_button = ctk.CTkButton(ticker_container, text="ADVANCE DAY >>", command=self._advance_day, 
-                                            width=200, height=60, 
-                                            fg_color=config.COLOR_SUCCESS_GREEN, hover_color=("#4CAF50"), 
-                                            text_color=config.COLOR_PANEL_BG, font=config.FONT_TITLE, corner_radius=8)
-        self.advance_button.pack(side=ctk.RIGHT)
-        
-        # Initialize ticker state (will be started after UI setup)
-        self.ticker_headlines = []
-        self.ticker_index = 0
         
         # 2. Button Footer Frame
         self.footer_frame = ctk.CTkFrame(self.right_frame, fg_color="transparent")
@@ -1152,58 +1180,142 @@ class CEOGameApp:
         log_projects_container.pack(fill=ctk.BOTH, expand=True, padx=10, pady=(4, 6))
         
         # Log Panel (LEFT half)
-        self.log_frame = ctk.CTkFrame(log_projects_container, fg_color=config.COLOR_PANEL_BG, corner_radius=10)
+        self.log_frame = ctk.CTkFrame(
+            log_projects_container,
+            fg_color="#1B2A39",
+            corner_radius=12,
+            border_width=1,
+            border_color="#0F1724",
+        )
         self.log_frame.pack(side=ctk.LEFT, fill=ctk.BOTH, expand=True, padx=(0, 5))
         ctk.CTkLabel(self.log_frame, text="EVENT LOG", font=config.FONT_HEADER, text_color=config.COLOR_ACCENT_PRIMARY).pack(pady=5)
         
-        self.log_text = ctk.CTkTextbox(self.log_frame, height=260, state="disabled", wrap='word', 
-                         font=config.FONT_MONO, fg_color=("#3E4E60"), text_color=config.COLOR_TEXT, 
-                         border_width=0, corner_radius=8) 
+        self.log_text = ctk.CTkTextbox(
+            self.log_frame,
+            height=260,
+            state="disabled",
+            wrap='word',
+            font=config.FONT_MONO,
+            fg_color="#16202D",
+            text_color=config.COLOR_TEXT,
+            border_width=0,
+            corner_radius=8,
+        ) 
         self.log_text.pack(fill=ctk.BOTH, expand=True, padx=10, pady=(0, 10))
 
         # Projects Panel (RIGHT half)
-        self.project_panel = ctk.CTkFrame(log_projects_container, fg_color=config.COLOR_PANEL_BG, corner_radius=10)
+        self.project_panel = ctk.CTkFrame(
+            log_projects_container,
+            fg_color="#1B2A39",
+            corner_radius=12,
+            border_width=1,
+            border_color="#0F1724",
+        )
         self.project_panel.pack(side=ctk.RIGHT, fill=ctk.BOTH, expand=True, padx=(5, 0))
 
         self.project_list_header = ctk.CTkLabel(self.project_panel, text="ACTIVE PROJECTS", font=config.FONT_HEADER, text_color=config.COLOR_ACCENT_PRIMARY)
         self.project_list_header.pack(fill='x', pady=(6, 0), padx=10)
+        
+        # Stats summary bar
+        self.project_stats_frame = ctk.CTkFrame(self.project_panel, fg_color='#16202D', corner_radius=8, height=32)
+        self.project_stats_frame.pack(fill='x', padx=10, pady=(0, 6))
+        self.project_stats_frame.pack_propagate(False)
+        self.project_stats_label = ctk.CTkLabel(self.project_stats_frame, text="", font=(config.FONT_FAMILY, 10, 'bold'), text_color=config.COLOR_TEXT)
+        self.project_stats_label.pack(pady=5)
 
-        self.project_list_frame = ctk.CTkScrollableFrame(self.project_panel, label_text="Ongoing R&D", label_font=config.FONT_BODY, label_text_color=config.COLOR_TEXT)
-        self.project_list_frame.pack(fill='both', padx=10, pady=(0, 10), expand=True)
+        self.project_list_frame = ctk.CTkScrollableFrame(self.project_panel, fg_color='transparent', scrollbar_button_color="#3A506B", scrollbar_button_hover_color="#5A7A9B")
+        self.project_list_frame.pack(fill='both', padx=8, pady=(0, 8), expand=True)
+        self.project_list_frame._parent_canvas.configure(yscrollincrement=5)
+
+        # News Ticker (below event log and active projects)
+        ticker_container = ctk.CTkFrame(self.action_frame, fg_color="transparent")
+        ticker_container.pack(side=ctk.TOP, fill=ctk.X, pady=(4, 6), padx=10)
+        self.ticker_frame = ctk.CTkFrame(ticker_container, fg_color=("#1C2833"), corner_radius=10, height=60)
+        self.ticker_frame.pack(fill=ctk.BOTH, expand=True)
+        self.ticker_frame.pack_propagate(False)
+        ctk.CTkLabel(self.ticker_frame, text="● MARKET NEWS", font=(config.FONT_FAMILY, 10, "bold"), 
+                text_color=config.COLOR_GOLD).pack(side=ctk.LEFT, padx=10)
+        self.ticker_label = ctk.CTkLabel(self.ticker_frame, text="", font=config.FONT_BODY, 
+                         text_color=config.COLOR_TEXT, anchor='w')
+        self.ticker_label.pack(side=ctk.LEFT, fill=ctk.X, expand=True, padx=10)
 
         # Status Panel Content
         self.status_labels = {}
-        
-        # NEW: ANALYST & CREDIT RATING WIDGET AT TOP OF LEFT PANEL
-        self.rating_frame = ctk.CTkFrame(self.status_frame, fg_color=config.COLOR_PANEL_BG)
-        self.rating_frame.pack(fill='x', pady=(10, 0), padx=10)
-        ctk.CTkLabel(self.rating_frame, text="WALL ST. RATING", font=config.FONT_HEADER, text_color=config.COLOR_TEXT).pack()
-        self.analyst_label = ctk.CTkLabel(self.rating_frame, text="HOLD", font=("Arial", 24, "bold"), text_color=config.COLOR_GOLD)
-        self.analyst_label.pack(pady=5)
-        
-        ctk.CTkLabel(self.rating_frame, text="CREDIT RATING", font=config.FONT_HEADER, text_color=config.COLOR_TEXT).pack(pady=(10, 0))
-        self.credit_label = ctk.CTkLabel(self.rating_frame, text="BBB", font=("Arial", 20, "bold"), text_color=config.COLOR_ACCENT_NEUTRAL)
-        self.credit_label.pack(pady=5)
 
-        self._add_status_section("FINANCIALS", ["Cash", "Debt", "Stock Price", "Market Cap", "Shares Out"], '#85C1E9')
-        self._add_status_section("CEO/BOARD", ["Reputation", "Morale", "CEO Health", "Board Confidence"], '#BB8FCE')
-        self._add_status_section("MARKET/TECH", ["Tech Level", "Customer Base", "Market Mood", "Analyst Rating"], '#27AE60') # Added Analyst Rating
-        self._add_status_section("OPERATIONS", ["R&D Eff", "Marketing Eff", "Operations Eff", "HR Eff", "B2B Share", "Consumer Share"], '#D35400')
+        # Rating card at top
+        self.rating_frame = ctk.CTkFrame(self.status_frame, fg_color="#1B2A39", corner_radius=12, border_width=1, border_color="#0F1724")
+        self.rating_frame.pack(fill='x', pady=(10, 6), padx=10)
+        header = ctk.CTkFrame(self.rating_frame, fg_color="transparent")
+        header.pack(fill='x', padx=12, pady=(10, 4))
+        ctk.CTkLabel(header, text="Company Pulse", font=config.FONT_HEADER, text_color=config.COLOR_TEXT).pack(side='left')
+
+        ratings_row = ctk.CTkFrame(self.rating_frame, fg_color="transparent")
+        ratings_row.pack(fill='x', padx=12, pady=(0, 10))
+        left = ctk.CTkFrame(ratings_row, fg_color="#16202D", corner_radius=10)
+        left.pack(side='left', fill='both', expand=True, padx=(0,6))
+        ctk.CTkLabel(left, text="Wall St. Rating", font=(config.FONT_FAMILY, 11, "bold"), text_color=config.COLOR_ACCENT_NEUTRAL).pack(pady=(8,2))
+        self.analyst_label = ctk.CTkLabel(left, text="HOLD", font=(config.FONT_FAMILY, 22, "bold"), text_color=config.COLOR_GOLD)
+        self.analyst_label.pack(pady=(0,8))
+
+        right = ctk.CTkFrame(ratings_row, fg_color="#16202D", corner_radius=10)
+        right.pack(side='right', fill='both', expand=True, padx=(6,0))
+        ctk.CTkLabel(right, text="Credit Rating", font=(config.FONT_FAMILY, 11, "bold"), text_color=config.COLOR_ACCENT_NEUTRAL).pack(pady=(8,2))
+        self.credit_label = ctk.CTkLabel(right, text="BBB", font=(config.FONT_FAMILY, 20, "bold"), text_color=config.COLOR_ACCENT_NEUTRAL)
+        self.credit_label.pack(pady=(0,8))
+
+        # Section cards
+        # COMMUNICATIONS section with Inbox button
+        comm_section = ctk.CTkFrame(self.status_frame, fg_color="#1B2A39", corner_radius=12, border_width=1, border_color="#0F1724")
+        comm_section.pack(fill='x', padx=10, pady=6)
         
-        self.email_status_label = ctk.CTkLabel(self.status_frame, text="EMAILS: 0 PENDING", font=config.FONT_HEADER, text_color=config.COLOR_SUCCESS_GREEN)
-        self.email_status_label.pack(fill='x', pady=(20, 0))
+        header = ctk.CTkFrame(comm_section, fg_color="transparent")
+        header.pack(fill='x', padx=12, pady=(10, 6))
+        ctk.CTkLabel(header, text="●", font=(config.FONT_FAMILY, 14, "bold"), text_color='#FF6B6B').pack(side='left', padx=(0,6))
+        ctk.CTkLabel(header, text="COMMUNICATIONS", font=config.FONT_HEADER, text_color=config.COLOR_TEXT).pack(side='left')
+        
+        body = ctk.CTkFrame(comm_section, fg_color="transparent")
+        body.pack(fill='x', padx=10, pady=(0, 10))
+        
+        inbox_btn_frame = ctk.CTkFrame(body, fg_color="#16202D", corner_radius=8)
+        inbox_btn_frame.pack(fill='x', pady=4)
+        
+        self.inbox_button = ctk.CTkButton(inbox_btn_frame, text="Inbox", command=self._open_email_dialog,
+                                          fg_color=config.COLOR_ACCENT_DANGER, hover_color="#E74C3C",
+                                          text_color="white", font=(config.FONT_FAMILY, 12, "bold"),
+                                          height=40, corner_radius=6)
+        self.inbox_button.pack(side=ctk.LEFT, fill='both', expand=True, padx=8, pady=8)
+        
+        self.email_badge = ctk.CTkLabel(inbox_btn_frame, text="0", font=(config.FONT_FAMILY, 11, "bold"),
+                                        text_color="white", fg_color=config.COLOR_SUCCESS_GREEN,
+                                        corner_radius=10, width=26, height=22)
+        self.email_badge.pack(side='right', padx=(0, 8), pady=8)
+        
+        self._add_status_section("FINANCIALS", ["Cash", "Debt", "Stock Price", "Market Cap", "Shares Out", "Profitability"], '#85C1E9')
+        self._add_status_section("CEO & BOARD", ["Reputation", "Morale", "CEO Health", "Board Confidence"], '#BB8FCE')
+        self._add_status_section("MARKET & TECH", ["Tech Level", "Customer Base", "Market Mood", "Analyst Rating"], '#27AE60')
+        self._add_status_section("OPERATIONS", ["R&D Eff", "Marketing Eff", "Operations Eff", "HR Eff", "B2B Share", "Consumer Share"], '#D35400')
 
         # ACTIVE PROJECTS moved to right panel (below event log) for smaller screens
 
 
     def _add_status_section(self, title, metrics, color):
-        ctk.CTkLabel(self.status_frame, text=title, font=config.FONT_HEADER, text_color=color).pack(fill='x', pady=(10, 0), padx=10)
+        section = ctk.CTkFrame(self.status_frame, fg_color="#1B2A39", corner_radius=12, border_width=1, border_color="#0F1724")
+        section.pack(fill='x', padx=10, pady=6)
+
+        header = ctk.CTkFrame(section, fg_color="transparent")
+        header.pack(fill='x', padx=12, pady=(10, 6))
+        ctk.CTkLabel(header, text="●", font=(config.FONT_FAMILY, 14, "bold"), text_color=color).pack(side='left', padx=(0,6))
+        ctk.CTkLabel(header, text=title, font=config.FONT_HEADER, text_color=config.COLOR_TEXT).pack(side='left')
+
+        body = ctk.CTkFrame(section, fg_color="transparent")
+        body.pack(fill='x', padx=10, pady=(0, 10))
+
         for metric in metrics:
-            frame = ctk.CTkFrame(self.status_frame, fg_color=config.COLOR_PANEL_BG)
-            frame.pack(fill='x', padx=10)
-            ctk.CTkLabel(frame, text=f"{metric}:", font=config.FONT_BODY, anchor='w', width=130, text_color=config.COLOR_TEXT).pack(side=ctk.LEFT, padx=(0, 5))
-            label_val = ctk.CTkLabel(frame, text="", font=config.FONT_STAT_VALUE, anchor='w', text_color=config.COLOR_TEXT)
-            label_val.pack(side=ctk.LEFT, fill='x', expand=True)
+            row = ctk.CTkFrame(body, fg_color="#16202D", corner_radius=8)
+            row.pack(fill='x', pady=4)
+            ctk.CTkLabel(row, text=f"{metric}", font=config.FONT_BODY, anchor='w', width=140, text_color=config.COLOR_ACCENT_NEUTRAL).pack(side=ctk.LEFT, padx=(10, 6), pady=6)
+            label_val = ctk.CTkLabel(row, text="", font=config.FONT_STAT_VALUE, anchor='w', text_color=config.COLOR_TEXT)
+            label_val.pack(side=ctk.LEFT, fill='x', expand=True, padx=(0, 10))
             self.status_labels[metric] = label_val
 
     
@@ -1211,8 +1323,9 @@ class CEOGameApp:
     def _update_status(self):
         corp = self.game
         
-        # Update Time/Header
-        self.time_label.configure(text=f"Q{corp.quarter} | Y{corp.year} | Day {corp.day}")
+        # Update Time/Header with difficulty indicator
+        diff_emoji = {"Easy": "🟢", "Medium": "🟡", "Hard": "🔴"}.get(corp.difficulty, "")
+        self.time_label.configure(text=f"{diff_emoji} Q{corp.quarter} | Y{corp.year} | Day {corp.day}")
         self.scenario_label.configure(text=f"MARKET: {corp.current_scenario.upper()}")
         
         # Update Analyst Rating Widget Separately
@@ -1240,6 +1353,21 @@ class CEOGameApp:
         self.status_labels["Stock Price"].configure(text=f"${corp.stock_price:.2f}")
         self.status_labels["Market Cap"].configure(text=f"${corp.market_cap:,.0f}")
         self.status_labels["Shares Out"].configure(text=f"{corp.shares_outstanding:,.0f}")
+        
+        # Update Profitability with color coding
+        quarterly_profit = corp.quarterly_revenue - corp.quarterly_costs
+        if quarterly_profit > 0:
+            profit_color = config.COLOR_SUCCESS_GREEN
+            profit_text = f"✓ ${quarterly_profit:,.0f}"
+        elif quarterly_profit == 0:
+            profit_color = config.COLOR_GOLD
+            profit_text = "Break-even"
+        else:
+            # Show how far away from break-even
+            distance = abs(quarterly_profit)
+            profit_color = config.COLOR_ACCENT_DANGER
+            profit_text = f"Loss: ${distance:,.0f}"
+        self.status_labels["Profitability"].configure(text=profit_text, text_color=profit_color)
         
         self.status_labels["Reputation"].configure(text=self._fmt_pct(corp.reputation))
         self.status_labels["Morale"].configure(text=self._fmt_pct(corp.employee_morale))
@@ -1301,6 +1429,9 @@ class CEOGameApp:
             text = f"{icon}${remaining/1000000:.0f}M / ${total/1000000:.0f}M"
             self.budget_labels[dept].configure(text=text, text_color=dept_color)
 
+        # Update card grid primary metrics
+        self._update_card_grid_main()
+
         # Update Employees Panel with color-coded labels and bonus info
         employees = corp.employees
         total_skill = sum(getattr(e, 'skill_level', 1) for e in employees)
@@ -1351,77 +1482,111 @@ class CEOGameApp:
         # Update Project List
         for widget in self.project_list_frame.winfo_children():
             widget.destroy()
+        
+        # Calculate stats for header
+        in_development = [p for p in corp.projects if p.lifecycle_stage == 'Development']
+        in_market = [p for p in corp.projects if p.lifecycle_stage != 'Development']
+        total_dev_cost = sum(p.initial_investment / p.development_days for p in in_development)
+        total_market_revenue = sum(p.daily_revenue for p in in_market)
+        net_daily = total_market_revenue - total_dev_cost
+        
+        # Update stats bar
+        if corp.projects:
+            net_color = config.COLOR_SUCCESS_GREEN if net_daily >= 0 else config.COLOR_ACCENT_DANGER
+            self.project_stats_label.configure(text=f"Dev: {len(in_development)} | Market: {len(in_market)} | Net: ${net_daily/1000:+.0f}K/day")
+        else:
+            self.project_stats_label.configure(text="No projects active")
             
         if not corp.projects:
-            ctk.CTkLabel(self.project_list_frame, text="No Active Projects", font=config.FONT_BODY, text_color=config.COLOR_ACCENT_NEUTRAL).pack(pady=10)
+            ctk.CTkLabel(self.project_list_frame, text="No Active Projects\n\nLaunch projects via Projects & Innovation", 
+                        font=config.FONT_BODY, text_color=config.COLOR_ACCENT_NEUTRAL, justify='center', fg_color="transparent").pack(pady=40)
         else:
-            for i, p in enumerate(corp.projects):
-                # Card container for each project (matches panel color scheme)
-                p_frame = ctk.CTkFrame(self.project_list_frame, fg_color=config.COLOR_PANEL_BG, corner_radius=8)
-                p_frame.pack(fill='x', pady=8, padx=6)
+            # Separate development and market projects
+            if in_development:
+                dev_header = ctk.CTkFrame(self.project_list_frame, fg_color='transparent')
+                dev_header.pack(fill='x', pady=(4, 4))
+                ctk.CTkLabel(dev_header, text="● In Development", font=(config.FONT_FAMILY, 11, 'bold'), 
+                           text_color=config.COLOR_ACCENT_DANGER).pack(side='left')
+                
+                for p in in_development:
+                    p_frame = ctk.CTkFrame(self.project_list_frame, fg_color=('#34495E'), corner_radius=8, border_width=1, border_color=config.COLOR_ACCENT_DANGER)
+                    p_frame.pack(fill='x', pady=4, padx=2)
 
-                # Header: type badge and project name
-                header = ctk.CTkFrame(p_frame, fg_color="transparent")
-                header.pack(fill='x', padx=10, pady=(8, 0))
-                p_type = {1: 'R&D', 2: 'Marketing', 3: 'Operations'}.get(p.type, 'Misc')
-                badge = ctk.CTkLabel(header, text=f"{p_type}", font=(config.FONT_FAMILY, 10, 'bold'), text_color=config.COLOR_PANEL_BG, fg_color=config.COLOR_ACCENT_PRIMARY, corner_radius=6)
-                badge.pack(side=ctk.LEFT, padx=(0,8))
-                ctk.CTkLabel(header, text=p.name, font=config.FONT_HEADER, text_color=config.COLOR_TEXT).pack(side=ctk.LEFT, anchor='w')
+                    header = ctk.CTkFrame(p_frame, fg_color="transparent")
+                    header.pack(fill='x', padx=8, pady=(6, 2))
+                    
+                    p_type = {1: 'R&D', 2: 'Marketing', 3: 'Operations'}.get(p.type, 'Misc')
+                    type_label = ctk.CTkLabel(header, text=p_type, font=(config.FONT_FAMILY, 9), text_color=config.COLOR_PANEL_BG, 
+                                             fg_color=config.COLOR_ACCENT_DANGER, corner_radius=4, width=55)
+                    type_label.pack(side='left', padx=(0, 6))
+                    ctk.CTkLabel(header, text=p.name, font=(config.FONT_FAMILY, 11, 'bold'), text_color=config.COLOR_TEXT).pack(side='left')
 
-                # Body: progress and days remaining
-                body = ctk.CTkFrame(p_frame, fg_color="transparent")
-                body.pack(fill='x', padx=10, pady=(6, 8))
-                days_label = ctk.CTkLabel(body, text=f"Days Left: {p.days_remaining} / {p.duration_days}", font=config.FONT_BODY, text_color=config.COLOR_ACCENT_NEUTRAL)
-                days_label.pack(anchor='w')
-
-                progress = (p.duration_days - p.days_remaining) / max(1, p.duration_days)
-                progress_bar = ctk.CTkProgressBar(body, width=320)
-                progress_bar.set(max(0.0, min(1.0, progress)))
-                progress_bar.pack(fill='x', pady=6)
-
-                # Footer: cancel button and quick info
-                footer = ctk.CTkFrame(p_frame, fg_color="transparent")
-                footer.pack(fill='x', padx=10, pady=(0, 8))
-
-                def cancel_project(proj_idx, proj_name=p.name):
-                    if messagebox.askyesno("Confirm Cancellation", f"Are you sure you want to cancel the project '{proj_name}'? You will lose all investment."):
-                        try:
-                            corp.projects.pop(proj_idx)
-                        except Exception:
-                            pass
-                        corp.log.append(f"Project '{proj_name}' cancelled.")
-                        self._update_status()
-
-                ctk.CTkButton(footer, text="Cancel", command=lambda idx=i: cancel_project(idx), 
-                              fg_color=config.COLOR_ACCENT_DANGER, hover_color=("#C0392B"), 
-                              font=config.FONT_BODY, width=120).pack(side=ctk.RIGHT)
-
-
-        # Email Status Update
-        email_count = len(self.game.email_system.inbox)
-        color = config.COLOR_ACCENT_DANGER if email_count > 0 else config.COLOR_SUCCESS_GREEN
-        status_text = f"EMAILS: {email_count} PENDING"
-        self.email_status_label.configure(text=status_text, text_color=color)
-        self.title_label.configure(text=f"{self.game.corp_name} - {self.game.ceo_name}")
-        
-        # Update First-Day Checklist (Day 1-3 only)
-        if corp.day <= 3:
-            checklist_items = []
-            if email_count > 0:
-                checklist_items.append("☐ Clear Executive Inbox")
-            if corp.action_points > 0:
-                checklist_items.append(f"☐ Spend action points ({corp.action_points} left)")
-            if all(corp.get_budget_remaining(d) > corp.annual_budget[d] * 0.8 for d in ['R&D', 'Marketing', 'Operations', 'HR']):
-                checklist_items.append("☐ Consider allocating budgets (none spent yet)")
+                    body = ctk.CTkFrame(p_frame, fg_color="transparent")
+                    body.pack(fill='x', padx=8, pady=2)
+                    
+                    days_remaining = p.development_days - p.days_in_stage
+                    progress_pct = (p.days_in_stage / p.development_days) * 100
+                    daily_cost = p.initial_investment / p.development_days
+                    
+                    ctk.CTkLabel(body, text=f"{progress_pct:.0f}% ({days_remaining}d left) | Cost: ${daily_cost/1000:.0f}K/day | Risk: {p.risk:.0%}", 
+                               font=(config.FONT_FAMILY, 9), text_color=config.COLOR_ACCENT_NEUTRAL).pack(anchor='w')
+                    
+                    progress_bar = ctk.CTkProgressBar(body, height=8, progress_color=config.COLOR_ACCENT_DANGER)
+                    progress_bar.set(progress_pct / 100)
+                    progress_bar.pack(fill='x', pady=(3, 6))
             
-            if not checklist_items:
-                self.checklist_label.configure(text="✓ Day 1 checklist complete! You're ready to advance.")
-            else:
-                checklist_text = "Day 1-3 Checklist:\n" + "\n".join(checklist_items)
-                self.checklist_label.configure(text=checklist_text)
-            self.checklist_frame.pack(fill='x', padx=12, pady=(8, 6))
+            if in_market:
+                if in_development:
+                    ctk.CTkFrame(self.project_list_frame, height=1, fg_color=config.COLOR_ACCENT_NEUTRAL).pack(fill='x', pady=8)
+                
+                market_header = ctk.CTkFrame(self.project_list_frame, fg_color='transparent')
+                market_header.pack(fill='x', pady=(4, 4))
+                ctk.CTkLabel(market_header, text="● In Market", font=(config.FONT_FAMILY, 11, 'bold'), 
+                           text_color=config.COLOR_SUCCESS_GREEN).pack(side='left')
+                
+                for p in in_market:
+                    stage_colors = {'Launch': config.COLOR_ACCENT_PRIMARY, 'Growth': config.COLOR_SUCCESS_GREEN, 
+                                   'Maturity': config.COLOR_GOLD, 'Decline': config.COLOR_ACCENT_DANGER}
+                    border_color = stage_colors.get(p.lifecycle_stage, config.COLOR_ACCENT_PRIMARY)
+                    
+                    p_frame = ctk.CTkFrame(self.project_list_frame, fg_color=('#34495E'), corner_radius=8, border_width=1, border_color=border_color)
+                    p_frame.pack(fill='x', pady=4, padx=2)
+
+                    header = ctk.CTkFrame(p_frame, fg_color="transparent")
+                    header.pack(fill='x', padx=8, pady=(6, 2))
+                    
+                    stage_label = ctk.CTkLabel(header, text=p.lifecycle_stage, font=(config.FONT_FAMILY, 9), 
+                                              text_color=config.COLOR_PANEL_BG, fg_color=border_color, corner_radius=4, width=55)
+                    stage_label.pack(side='left', padx=(0, 6))
+                    ctk.CTkLabel(header, text=p.name, font=(config.FONT_FAMILY, 11, 'bold'), text_color=config.COLOR_TEXT).pack(side='left')
+
+                    body = ctk.CTkFrame(p_frame, fg_color="transparent")
+                    body.pack(fill='x', padx=8, pady=(2, 6))
+                    
+                    ctk.CTkLabel(body, text=f"Day {p.total_days_live} | ${p.daily_revenue/1000:.0f}K/day | Quality: {p.quality_score:.0f} | Share: {p.market_share:.1f}%",
+                               font=(config.FONT_FAMILY, 9), text_color=config.COLOR_SUCCESS_GREEN).pack(anchor='w')
+                    
+                    # Retire button for declining products
+                    if p.lifecycle_stage == 'Decline':
+                        def make_retire(prod):
+                            def _retire():
+                                corp.retire_product(prod)
+                                messagebox.showinfo('Retired', f'{prod.name} retired')
+                                self._update_status()
+                            return _retire
+                        ctk.CTkButton(body, text='Retire', command=make_retire(p), fg_color=config.COLOR_ACCENT_DANGER, 
+                                    width=60, height=22, font=(config.FONT_FAMILY, 9)).pack(anchor='e', pady=(2, 0))
+
+
+        # Email Badge Update (on inbox button)
+        email_count = len(self.game.email_system.inbox)
+        if email_count > 0:
+            self.email_badge.configure(text=str(email_count), fg_color=config.COLOR_ACCENT_DANGER)
+            self.email_badge.lift()  # Make sure it's visible
         else:
-            self.checklist_frame.pack_forget()
+            self.email_badge.configure(text="0", fg_color=config.COLOR_SUCCESS_GREEN)
+        
+        self.title_label.configure(text=f"{self.game.corp_name} - {self.game.ceo_name}")
         
         # Update Pre-Earnings Banner (10 days before earnings call)
         days_in_quarter = (corp.day - 1) % 90
@@ -1436,6 +1601,7 @@ class CEOGameApp:
         settings_window = ctk.CTkToplevel(self.master)
         settings_window.title("Game Settings")
         settings_window.geometry("550x700")  # Increased size to show all settings
+        settings_window.configure(fg_color="#0F1724")
         self._set_window_icon(settings_window)
         settings_window.attributes('-topmost', True)
         settings_window.grab_set()
@@ -1443,7 +1609,7 @@ class CEOGameApp:
         ctk.CTkLabel(settings_window, text="Application Settings", font=config.FONT_TITLE, text_color=config.COLOR_ACCENT_PRIMARY).pack(pady=20)
 
         # Scrollable frame for all settings
-        scroll_frame = ctk.CTkScrollableFrame(settings_window, fg_color="transparent")
+        scroll_frame = ctk.CTkScrollableFrame(settings_window, fg_color="#0F1724")
         scroll_frame.pack(fill='both', expand=True, padx=10, pady=(0, 10))
 
         # 1. Theme Selector
@@ -1548,7 +1714,7 @@ class CEOGameApp:
         ctk.CTkButton(scroll_frame, text="Reset Tutorial", command=reset_tutorial, fg_color=config.COLOR_ACCENT_NEUTRAL, font=config.FONT_BODY).pack(pady=10)
 
         # Developer Mode Toggle (with password protection)
-        ctk.CTkLabel(scroll_frame, text="🔐 Developer Mode", font=config.FONT_HEADER, text_color=config.COLOR_GOLD).pack(pady=(15, 5))
+        ctk.CTkLabel(scroll_frame, text="Developer Mode", font=config.FONT_HEADER, text_color=config.COLOR_GOLD).pack(pady=(15, 5))
         ctk.CTkLabel(scroll_frame, text="Grant yourself unlimited resources for testing.", font=config.FONT_BODY, text_color=config.COLOR_ACCENT_NEUTRAL).pack(pady=(0, 10))
         
         def activate_dev_mode_from_settings():
@@ -1851,7 +2017,13 @@ class CEOGameApp:
                 self._handle_mandatory_popup(event_trigger)
                 return
 
-            # 6. Normal day advance complete
+            # 6. Check for victory condition (reached #1 on Wall Street)
+            if self.game.check_victory_condition():
+                self._update_status()
+                self._show_victory_screen()
+                return
+
+            # 7. Normal day advance complete
             self._update_status()
             self.advance_button.configure(state=ctk.NORMAL) # Re-enable if no blocking event
         
@@ -1859,6 +2031,21 @@ class CEOGameApp:
             print(f"Advance day error: {e}")
             self.advance_button.configure(state=ctk.NORMAL)  # Always re-enable button on error
             messagebox.showerror("Error", f"An error occurred while advancing the day: {e}")
+
+    def _confirm_employee_overlap(self, action_key: str) -> bool:
+        """Check if any employee is assigned to this action and warn before spending a point.
+        Returns True to proceed (spend point), False to cancel without spending.
+        """
+        corp = self.game
+        try:
+            if any(e.assigned_action == action_key for e in corp.employees):
+                return messagebox.askyesno(
+                    "Employee Already Handling",
+                    "An employee is assigned to this task and will automatically work on it today.\n\nProceed anyway and spend 1 action point?"
+                )
+            return True
+        except Exception:
+            return True
     
     def _handle_emergency_borrowing(self):
         """Handle negative cash emergency - force player to borrow or go bankrupt."""
@@ -1958,6 +2145,76 @@ class CEOGameApp:
         # Prevent closing without action
         emergency_window.protocol("WM_DELETE_WINDOW", lambda: None)
 
+    def _show_victory_screen(self):
+        """Display victory screen when player reaches #1 on Wall Street."""
+        self.advance_button.configure(state=ctk.DISABLED)
+        
+        victory_window = ctk.CTkToplevel(self.master)
+        victory_window.title("🏆 VICTORY!")
+        victory_window.geometry("800x600")
+        victory_window.attributes('-topmost', True)
+        self._set_window_icon(victory_window)
+        victory_window.grab_set()
+        
+        victory_window.configure(fg_color=("#0A2F1A"))
+        
+        # Trophy header
+        header_frame = ctk.CTkFrame(victory_window, fg_color=("#1A472A"), corner_radius=0)
+        header_frame.pack(fill='x', pady=(0, 20))
+        ctk.CTkLabel(header_frame, text="🏆", font=("Arial", 80)).pack(pady=(20, 10))
+        ctk.CTkLabel(header_frame, text="CONGRATULATIONS!", 
+                    font=("Arial", 36, 'bold'), text_color=config.COLOR_SUCCESS_GREEN).pack(pady=(0, 5))
+        ctk.CTkLabel(header_frame, text="You've Conquered Wall Street!", 
+                    font=config.FONT_TITLE, text_color=config.COLOR_GOLD).pack(pady=(0, 20))
+        
+        # Victory stats
+        stats_frame = ctk.CTkFrame(victory_window, fg_color=config.COLOR_PANEL_BG, corner_radius=15)
+        stats_frame.pack(fill='both', expand=True, padx=30, pady=(0, 20))
+        
+        ctk.CTkLabel(stats_frame, text="🎯 MISSION ACCOMPLISHED", 
+                    font=config.FONT_HEADER, text_color=config.COLOR_ACCENT_PRIMARY).pack(pady=(30, 20))
+        
+        stats_text = f"""You started at the bottom with a stock price of $10.00
+and climbed to #1 on the Wall Street Leaderboard!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Final Statistics:
+
+📈 Stock Price: ${self.game.stock_price:.2f}
+💰 Market Cap: ${self.game.market_cap/1_000_000:.1f}M
+💳 Cash Position: ${self.game.cash/1_000_000:.1f}M
+📊 Credit Rating: {self.game.credit_rating}
+⭐ Analyst Rating: {self.game.analyst_rating}
+
+🏢 {self.game.corp_name}
+👔 CEO: {self.game.ceo_name}
+📅 Day {self.game.day} • Quarter {self.game.quarter} • Year {self.game.year}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+You are now the most valuable company
+in the market. You've outperformed all
+12 competitors and proven yourself as
+the ultimate business executive!"""
+        
+        ctk.CTkLabel(stats_frame, text=stats_text, font=config.FONT_BODY, 
+                    text_color=config.COLOR_TEXT, justify='left').pack(pady=20, padx=40)
+        
+        # Buttons
+        button_frame = ctk.CTkFrame(victory_window, fg_color="transparent")
+        button_frame.pack(pady=(0, 20))
+        
+        ctk.CTkButton(button_frame, text="View Leaderboard", 
+                     command=lambda: [victory_window.destroy(), self._show_wall_street()],
+                     fg_color=config.COLOR_SUCCESS_GREEN, hover_color=("#2A8F4A"),
+                     font=config.FONT_HEADER, height=50, width=220).pack(side='left', padx=10)
+        
+        ctk.CTkButton(button_frame, text="Continue Playing", 
+                     command=lambda: [victory_window.destroy(), self.advance_button.configure(state=ctk.NORMAL)],
+                     fg_color=config.COLOR_ACCENT_PRIMARY, hover_color=("#4A90E2"),
+                     font=config.FONT_HEADER, height=50, width=220).pack(side='left', padx=10)
+
     def _check_game_over(self, reason):
         # ... (Game Over logic remains the same, using CTkinter dialogs)
         self.advance_button.configure(state=ctk.DISABLED)
@@ -1988,9 +2245,10 @@ class CEOGameApp:
             msg = "The game has ended."
             messagebox.showerror("GAME OVER", msg)
         
-        # Disable all action buttons
-        for btn in [self.btn_email, self.btn_rnd, self.btn_budget, self.btn_debt, self.btn_hr, self.btn_market, self.btn_card]:
-            btn.configure(state=ctk.DISABLED)
+        # Disable key action buttons
+        for btn in [getattr(self, 'btn_email', None), getattr(self, 'btn_card', None), getattr(self, 'btn_union', None), getattr(self, 'btn_budget', None)]:
+            if btn:
+                btn.configure(state=ctk.DISABLED)
 
 # --- ACTION DIALOGS (CTKTOPLEVEL) ---
 
@@ -2105,7 +2363,7 @@ class CEOGameApp:
             messagebox.showwarning("No Actions Remaining", "You have no daily actions left. Advance to the next day or hire employees to automate tasks.")
             return
         
-        # Deduct action point
+        # HR is a manual action; proceed without employee overlap check
         corp.action_points -= 1
         self._update_status()
         
@@ -2151,8 +2409,9 @@ class CEOGameApp:
             for e in corp.employees:
                 row = ctk.CTkFrame(emp_list, fg_color=config.COLOR_PANEL_BG, corner_radius=6)
                 row.pack(fill='x', pady=3)
-                ctk.CTkLabel(row, text=f"{e.name} ({e.employee_type})", font=config.FONT_BODY, text_color=config.COLOR_GOLD).pack(side=ctk.LEFT, padx=10, pady=6)
-                ctk.CTkLabel(row, text=f"${e.daily_salary:,.0f}/day | Tasks: {e.tasks_completed}", font=config.FONT_BODY, text_color=config.COLOR_ACCENT_NEUTRAL).pack(side=ctk.RIGHT, padx=10)
+                ctk.CTkLabel(row, text=f"{e.name}", font=config.FONT_BODY, text_color=config.COLOR_GOLD).pack(side=ctk.LEFT, padx=10, pady=6)
+                ctk.CTkLabel(row, text=f"{e.position} | ${e.daily_salary:,.0f}/day | {e.tasks_completed} tasks | Skill {e.skill_level:.2f}", 
+                           font=config.FONT_BODY, text_color=config.COLOR_ACCENT_NEUTRAL).pack(side=ctk.RIGHT, padx=10)
 
         refresh_emp_list()
 
@@ -2160,10 +2419,20 @@ class CEOGameApp:
         ctk.CTkLabel(emp_scroll, text="🎯 Available Hires", font=config.FONT_HEADER, text_color=config.COLOR_ACCENT_NEUTRAL).pack(anchor='w', pady=(12, 8))
 
         options = [
-            {"type": "Analyst", "signing_bonus": 1000000, "daily_salary": 15000, "skill": 1.0, "desc": "Can automate simple inbox and PR tasks."},
-            {"type": "Manager", "signing_bonus": 3000000, "daily_salary": 35000, "skill": 1.25, "desc": "Handles investor meetings and legal issues."},
-            {"type": "Specialist", "signing_bonus": 6000000, "daily_salary": 70000, "skill": 1.5, "desc": "Assists with tech upgrades and benefits."},
-            {"type": "Automation Expert", "signing_bonus": 12000000, "daily_salary": 150000, "skill": 1.75, "desc": "Handles nearly all action types reliably."},
+            {"position": "Marketing Analyst", "signing_bonus": 400000, "daily_salary": 8000, "skill": 1.0, 
+             "desc": "Handles marketing campaigns and customer outreach to grow market share."},
+            {"position": "Finance Manager", "signing_bonus": 500000, "daily_salary": 10000, "skill": 1.1, 
+             "desc": "Manages budgets, optimizes expenses, and monitors cash flow."},
+            {"position": "R&D Specialist", "signing_bonus": 600000, "daily_salary": 12000, "skill": 1.15, 
+             "desc": "Conducts research, develops innovations, and advances technology."},
+            {"position": "Operations Manager", "signing_bonus": 550000, "daily_salary": 11000, "skill": 1.1, 
+             "desc": "Streamlines workflows, reduces costs, and improves efficiency."},
+            {"position": "HR Coordinator", "signing_bonus": 450000, "daily_salary": 9000, "skill": 1.05, 
+             "desc": "Boosts employee morale, manages recruitment, and builds company culture."},
+            {"position": "Project Manager", "signing_bonus": 750000, "daily_salary": 16000, "skill": 1.25, 
+             "desc": "Launches strategic projects and manages product development pipeline."},
+            {"position": "Executive Assistant", "signing_bonus": 700000, "daily_salary": 15000, "skill": 1.2, 
+             "desc": "Handles emails, coordinates multiple departments, versatile support."},
         ]
 
         for opt in options:
@@ -2173,8 +2442,8 @@ class CEOGameApp:
             left = ctk.CTkFrame(card, fg_color="transparent")
             left.pack(side=ctk.LEFT, fill=ctk.BOTH, expand=True, padx=10, pady=8)
             
-            ctk.CTkLabel(left, text=opt['type'], font=config.FONT_HEADER, text_color=config.COLOR_TEXT).pack(anchor='w')
-            ctk.CTkLabel(left, text=opt['desc'], font=config.FONT_BODY, text_color=config.COLOR_ACCENT_NEUTRAL).pack(anchor='w')
+            ctk.CTkLabel(left, text=opt['position'], font=config.FONT_HEADER, text_color=config.COLOR_TEXT).pack(anchor='w')
+            ctk.CTkLabel(left, text=opt['desc'], font=config.FONT_BODY, text_color=config.COLOR_ACCENT_NEUTRAL, wraplength=550).pack(anchor='w')
             
             right = ctk.CTkFrame(card, fg_color="transparent")
             right.pack(side=ctk.RIGHT, padx=10, pady=8)
@@ -2185,19 +2454,19 @@ class CEOGameApp:
             def make_hire(opt_data):
                 def _hire():
                     if not corp.can_afford_action('HR', opt_data['signing_bonus']):
-                        messagebox.showwarning("Budget Shortfall", f"HR cannot afford this hire.")
+                        messagebox.showwarning("Budget Shortfall", f"HR department cannot afford this hire.")
                         return
                     if corp.cash < opt_data['signing_bonus']:
-                        messagebox.showwarning("Insufficient Cash", "Not enough corporate cash.")
+                        messagebox.showwarning("Insufficient Cash", "Not enough corporate cash for signing bonus.")
                         return
                     
                     corp.spend_from_budget('HR', opt_data['signing_bonus'])
                     corp.cash -= opt_data['signing_bonus']
-                    name = f"{opt_data['type']}_{len(corp.employees)+1}"
-                    emp = config.EMPLOYEE_FACTORY(name, opt_data['type'], opt_data['signing_bonus'], opt_data['daily_salary'], opt_data['skill'])
+                    emp = config.EMPLOYEE_FACTORY(opt_data['position'], opt_data['signing_bonus'], opt_data['daily_salary'], opt_data['skill'])
                     emp.hired_day = corp.day
                     corp.employees.append(emp)
-                    corp.log.append(f"Hired {emp.name}.")
+                    corp.log.append(f"Hired {emp.name} as {emp.position}. Signing bonus: ${opt_data['signing_bonus']/1000:.0f}K")
+                    messagebox.showinfo("Employee Hired", f"Welcome aboard {emp.name}!\n\nPosition: {emp.position}\nSkill Level: {emp.skill_level}")
                     self._update_status()
                     refresh_emp_list()
                 return _hire
@@ -2254,6 +2523,19 @@ class CEOGameApp:
                         
                         def make_acquire(comp, idx):
                             def _acquire():
+                                # Request board approval first
+                                approved, board_msg = corp.get_board_approval("acquisitions")
+                                
+                                if not approved:
+                                    messagebox.showwarning("Board Rejected", 
+                                                         f"The Board of Directors has rejected this acquisition.\n\n{board_msg}")
+                                    self._update_status()
+                                    return
+                                
+                                # If approved, proceed with acquisition
+                                messagebox.showinfo("Board Approved", 
+                                                  f"The Board has approved this acquisition!\n\n{board_msg}\n\nProceeding with acquisition attempt...")
+                                
                                 success, msg, price = corp.attempt_acquire_company(comp.name, idx)
                                 if success:
                                     messagebox.showinfo("Success", msg)
@@ -2313,10 +2595,18 @@ class CEOGameApp:
         # Map actions to friendly labels
         action_labels = {
             "email": "Handle Emails",
-            "marketing": "Run Marketing",
+            "marketing": "Run Marketing Campaigns",
+            "customer_outreach": "Customer Outreach",
             "rnd": "Invest in R&D",
+            "innovation": "Innovation Projects",
             "budget": "Rebalance Budgets",
-            "hr": "Boost Morale"
+            "cash_management": "Cash Flow Management",
+            "efficiency": "Improve Efficiency",
+            "cost_reduction": "Cost Reduction Audits",
+            "morale": "Boost Employee Morale",
+            "hiring_support": "Recruitment Support",
+            "wellness": "CEO Wellness Session",
+            "launch_project": "Launch New Projects"
         }
 
         scroll = ctk.CTkScrollableFrame(assign_window, fg_color="transparent")
@@ -2358,7 +2648,226 @@ class CEOGameApp:
                       fg_color=config.COLOR_SUCCESS_GREEN, font=config.FONT_HEADER, width=220).pack(pady=12)
         ctk.CTkButton(assign_window, text="Close", command=assign_window.destroy, fg_color=config.COLOR_ACCENT_NEUTRAL).pack(pady=(0,12))
 
-    def _open_rnd_dialog(self):
+    def _build_card_grid_main(self):
+        """Build primary card grid layout in the main view."""
+        corp = self.game
+
+        def fmt_money(val):
+            if abs(val) >= 1_000_000_000:
+                return f"${val/1_000_000_000:.1f}B"
+            if abs(val) >= 1_000_000:
+                return f"${val/1_000_000:.1f}M"
+            return f"${val:,.0f}"
+
+        self.card_grid_config = [
+            {
+                "title": "Finance",
+                "value_fn": lambda c: f"Cash: {fmt_money(c.cash)}",
+                "sub_fn": lambda c: f"Profit: {fmt_money(c.quarterly_revenue - c.quarterly_costs)} / Q",
+                "actions": [
+                    ("Debt & Equity", self._open_debt_equity_dialog),
+                    ("Adjust Budgets", self._open_budget_dialog),
+                    ("Corporate Card", self._open_expense_dialog),
+                ],
+            },
+            {
+                "title": "HR & People",
+                "value_fn": lambda c: f"Employees: {len(c.employees)}",
+                "sub_fn": lambda c: f"Morale: {c.employee_morale:.0f}%",
+                "actions": [
+                    ("Hire & Acquire", self._open_hr_dialog),
+                    ("Assign Employee Tasks", self._open_employee_tasks_dialog),
+                    ("Union Relations", self._open_union_dialog),
+                ],
+            },
+            {
+                "title": "Projects",
+                "value_fn": lambda c: f"Active: {len(c.projects)}",
+                "sub_fn": lambda c: f"Action Pts: {c.action_points}/{c.max_action_points}",
+                "actions": [
+                    ("Projects & Innovation", self._open_innovation_hub),
+                ],
+            },
+            {
+                "title": "Marketing",
+                "value_fn": lambda c: f"Customers: {c.customer_base:.0f}%",
+                "sub_fn": lambda c: f"Last marketing: {c.days_without_marketing} days",
+                "actions": [
+                    ("Shift Market Focus", self._open_market_shift_dialog),
+                ],
+            },
+            {
+                "title": "Technology",
+                "value_fn": lambda c: f"Tech Level: {c.technology_level:.0f}",
+                "sub_fn": lambda c: f"R&D Daily: ${c.calculate_daily_rnd_cost():,.0f}",
+                "actions": [
+                    ("Executive Upgrades", self._open_upgrades_dialog),
+                ],
+            },
+            {
+                "title": "Board & Stock",
+                "value_fn": lambda c: f"Stock: ${c.stock_price:.2f}",
+                "sub_fn": lambda c: f"Confidence: {c.board_confidence:.0f}%",
+                "actions": [
+                    ("Board Overview", self._show_board_overview),
+                    ("Wall St. Leaderboard", self._show_wall_street),
+                    
+                ],
+            },
+        ]
+
+        grid = ctk.CTkFrame(self.action_frame, fg_color="transparent")
+        grid.pack(fill='both', expand=False, padx=12, pady=(4, 6))
+        grid.grid_columnconfigure((0,1,2), weight=1, uniform="cards-main")
+
+        self.card_grid_cells = []
+        self.card_grid_vars = []
+        for idx, card in enumerate(self.card_grid_config):
+            row = idx // 3
+            col = idx % 3
+            frame = ctk.CTkFrame(grid, fg_color="#1B2A39", corner_radius=12, border_width=1, border_color="#0F1724")
+            frame.grid(row=row, column=col, padx=6, pady=6, sticky="nsew")
+            frame.grid_propagate(False)
+            frame.configure(height=170)
+
+            header = ctk.CTkFrame(frame, fg_color="transparent")
+            header.pack(fill='x', padx=12, pady=(10,2))
+            title_lbl = ctk.CTkLabel(header, text=card["title"], font=config.FONT_HEADER, text_color=config.COLOR_ACCENT_PRIMARY, anchor='w')
+            title_lbl.pack(side='left')
+            value_lbl = ctk.CTkLabel(frame, text="-", font=(config.FONT_FAMILY, 22, "bold"), text_color=config.COLOR_TEXT, anchor='w')
+            value_lbl.pack(fill='x', padx=12)
+            sub_lbl = ctk.CTkLabel(frame, text="-", font=config.FONT_BODY, text_color=config.COLOR_ACCENT_NEUTRAL, anchor='w')
+            sub_lbl.pack(fill='x', padx=12, pady=(2,10))
+
+            actions = card.get("actions", [])
+            if actions:
+                if len(actions) == 1:
+                    label, func = actions[0]
+                    btn = ctk.CTkButton(frame, text=label, command=func,
+                                        fg_color=config.COLOR_ACCENT_PRIMARY, hover_color=("#4A90E2"),
+                                        text_color=config.COLOR_PANEL_BG, font=config.FONT_HEADER, height=36)
+                    btn.pack(fill='x', padx=12, pady=(0,12))
+                else:
+                    labels = [a[0] for a in actions]
+                    var = ctk.StringVar(value=labels[0])
+                    menu = ctk.CTkOptionMenu(frame, variable=var, values=labels,
+                                             command=lambda choice, cfg=card, v=var: self._handle_card_action(cfg, choice, v),
+                                             fg_color=config.COLOR_ACCENT_PRIMARY, button_color=config.COLOR_ACCENT_PRIMARY,
+                                             text_color=config.COLOR_PANEL_BG, dropdown_fg_color="#12304A",
+                                             dropdown_text_color=config.COLOR_TEXT, font=config.FONT_HEADER)
+                    menu.pack(fill='x', padx=12, pady=(0,12))
+                    self.card_grid_vars.append(var)
+            self.card_grid_cells.append({"value": value_lbl, "sub": sub_lbl})
+
+    def _update_card_grid_main(self):
+        """Refresh main card grid metrics."""
+        if not hasattr(self, 'card_grid_cells'):
+            return
+        corp = self.game
+        for cell, cfg in zip(self.card_grid_cells, self.card_grid_config):
+            cell["value"].configure(text=cfg["value_fn"](corp))
+            cell["sub"].configure(text=cfg["sub_fn"](corp))
+
+    def _handle_card_action(self, card_cfg, choice, var):
+        actions = card_cfg.get("actions", [])
+        for label, func in actions:
+            if label == choice:
+                try:
+                    func()
+                finally:
+                    # reset to first option to show default choice
+                    var.set(actions[0][0])
+                return
+
+    def _open_card_grid_dashboard(self):
+        """Experimental card-grid dashboard with primary actions."""
+        corp = self.game
+
+        dash = ctk.CTkToplevel(self.master)
+        dash.title("Card Grid Dashboard (Beta)")
+        dash.geometry("1150x780")
+        dash.attributes('-topmost', True)
+        dash.grab_set()
+        self._set_window_icon(dash)
+
+        ctk.CTkLabel(dash, text="Executive Command Grid", font=config.FONT_TITLE, text_color=config.COLOR_ACCENT_PRIMARY).pack(pady=(12, 2))
+        ctk.CTkLabel(dash, text="Headline metrics with one-click primary actions.", font=config.FONT_BODY, text_color=config.COLOR_ACCENT_NEUTRAL).pack(pady=(0, 12))
+
+        def fmt_money(val):
+            if abs(val) >= 1_000_000_000:
+                return f"${val/1_000_000_000:.1f}B"
+            if abs(val) >= 1_000_000:
+                return f"${val/1_000_000:.1f}M"
+            return f"${val:,.0f}"
+
+        profit = corp.quarterly_revenue - corp.quarterly_costs
+        cards = [
+            {
+                "title": "Finance",
+                "value": fmt_money(corp.cash),
+                "sub": f"Profit: {fmt_money(profit)} / Q",
+                "button": "Debt & Equity",
+                "action": self._open_debt_equity_dialog,
+            },
+            {
+                "title": "HR & People",
+                "value": f"Employees: {len(corp.employees)}",
+                "sub": f"Morale: {corp.employee_morale:.0f}%",
+                "button": "Hire & Acquire",
+                "action": self._open_hr_dialog,
+            },
+            {
+                "title": "Projects",
+                "value": f"Active: {len(corp.projects)}",
+                "sub": f"Action Pts: {corp.action_points}/{corp.max_action_points}",
+                "button": "Projects & Innovation",
+                "action": self._open_innovation_hub,
+            },
+            {
+                "title": "Marketing",
+                "value": f"Customers: {corp.customer_base:.0f}%",
+                "sub": f"Days since marketing: {corp.days_without_marketing}",
+                "button": "Shift Market Focus",
+                "action": self._open_market_shift_dialog,
+            },
+            {
+                "title": "Technology",
+                "value": f"Tech Level: {corp.technology_level:.0f}",
+                "sub": "Upgrades & R&D",
+                "button": "Executive Upgrades",
+                "action": self._open_upgrades_dialog,
+            },
+            {
+                "title": "Board & Stock",
+                "value": f"Stock: ${corp.stock_price:.2f}",
+                "sub": f"Confidence: {corp.board_confidence:.0f}%",
+                "button": "Board Overview",
+                "action": self._show_board_overview,
+            },
+        ]
+
+        grid = ctk.CTkFrame(dash, fg_color="transparent")
+        grid.pack(fill='both', expand=True, padx=16, pady=12)
+        grid.grid_columnconfigure((0,1,2), weight=1, uniform="cards")
+
+        for idx, card in enumerate(cards):
+            row = idx // 3
+            col = idx % 3
+            frame = ctk.CTkFrame(grid, fg_color=config.COLOR_PANEL_BG, corner_radius=12)
+            frame.grid(row=row, column=col, padx=8, pady=8, sticky="nsew")
+            frame.grid_propagate(False)
+            frame.configure(height=200)
+
+            ctk.CTkLabel(frame, text=card["title"], font=config.FONT_HEADER, text_color=config.COLOR_ACCENT_PRIMARY, anchor='w').pack(fill='x', padx=12, pady=(12,2))
+            ctk.CTkLabel(frame, text=card["value"], font=(config.FONT_FAMILY, 22, "bold"), text_color=config.COLOR_TEXT, anchor='w').pack(fill='x', padx=12)
+            ctk.CTkLabel(frame, text=card["sub"], font=config.FONT_BODY, text_color=config.COLOR_ACCENT_NEUTRAL, anchor='w').pack(fill='x', padx=12, pady=(2,10))
+
+            ctk.CTkButton(frame, text=card["button"], command=card["action"],
+                          fg_color=config.COLOR_ACCENT_PRIMARY, hover_color=("#4A90E2"),
+                          text_color=config.COLOR_PANEL_BG, font=config.FONT_HEADER, height=38).pack(fill='x', padx=12, pady=(0,12))
+
+    def _open_innovation_hub(self):
+        """Combined Projects & Innovation Hub: R&D, Strategic Projects, and Product Portfolio."""
         corp = self.game
         
         # Check action points
@@ -2366,26 +2875,28 @@ class CEOGameApp:
             messagebox.showwarning("No Actions Remaining", "You have no daily actions left. Advance to the next day or hire employees to automate tasks.")
             return
         
-        # Deduct action point
+        # Confirm overlap with employee-assigned projects before spending a point
+        if not self._confirm_employee_overlap('launch_project'):
+            return
         corp.action_points -= 1
         self._update_status()
         
-        rnd_window = ctk.CTkToplevel(self.master)
-        rnd_window.title("R&D Lab and Projects")
-        rnd_window.geometry("1000x800")
-        rnd_window.attributes('-topmost', True)
-        rnd_window.grab_set()
-        self._set_window_icon(rnd_window)
+        hub_window = ctk.CTkToplevel(self.master)
+        hub_window.title("Projects & Innovation Hub")
+        hub_window.geometry("1100x850")
+        hub_window.attributes('-topmost', True)
+        hub_window.grab_set()
+        self._set_window_icon(hub_window)
 
-        ctk.CTkLabel(rnd_window, text="R&D Lab & Strategic Projects", font=config.FONT_TITLE, text_color=config.COLOR_ACCENT_PRIMARY).pack(pady=10)
+        ctk.CTkLabel(hub_window, text="🚀 Projects & Innovation Hub", font=config.FONT_TITLE, text_color=config.COLOR_ACCENT_PRIMARY).pack(pady=10)
         
         # Inline cue
-        cue_frame = ctk.CTkFrame(rnd_window, fg_color=("#2E4053"), corner_radius=8)
+        cue_frame = ctk.CTkFrame(hub_window, fg_color=("#2E4053"), corner_radius=8)
         cue_frame.pack(fill='x', padx=12, pady=(0, 8))
-        ctk.CTkLabel(cue_frame, text="💡 Daily R&D investment drains cash each day until track is complete. Projects have upfront + daily costs.", 
-                   font=config.FONT_BODY, text_color=config.COLOR_GOLD, wraplength=960, justify='left').pack(padx=10, pady=8)
+        ctk.CTkLabel(cue_frame, text="💡 R&D Investment: Daily spending boosts tech. Active Projects: Strategic projects and products generate revenue while active!", 
+                   font=config.FONT_BODY, text_color=config.COLOR_GOLD, wraplength=1060, justify='left').pack(padx=10, pady=8)
 
-        tabview = ctk.CTkTabview(rnd_window, width=950, height=700)
+        tabview = ctk.CTkTabview(hub_window, width=1050, height=750)
         tabview.pack(padx=20, pady=20, fill='both', expand=True)
 
         # --- R&D INVESTMENT TAB ---
@@ -2453,107 +2964,131 @@ class CEOGameApp:
                     ctk.CTkLabel(investment_frame, text="Track completed. Investment stopped.", 
                                font=config.FONT_BODY, text_color=config.COLOR_SUCCESS_GREEN).pack(padx=10, pady=(0, 8))
 
-        # --- NEW PROJECT TAB ---
-        project_tab = tabview.add("New Strategic Project")
-        
-        if len(corp.projects) >= config.PROJECT_LIMIT:
-            ctk.CTkLabel(project_tab, text=f"Project Limit Reached: {config.PROJECT_LIMIT}", font=config.FONT_TITLE, text_color=config.COLOR_ACCENT_DANGER).pack(pady=20)
-        else:
-            new_proj_frame = ctk.CTkFrame(project_tab, fg_color="transparent")
-            new_proj_frame.pack(pady=10, padx=20, anchor='n')
-
-            ctk.CTkLabel(new_proj_frame, text="Start a New Strategic Project", font=config.FONT_HEADER, text_color=config.COLOR_GOLD).pack(pady=10)
-            
-            # Name
-            ctk.CTkLabel(new_proj_frame, text="Project Name:", font=config.FONT_BODY, text_color=config.COLOR_TEXT).pack(pady=(5, 0))
-            name_entry = ctk.CTkEntry(new_proj_frame, width=300, font=config.FONT_BODY)
-            name_entry.pack()
-
-            # Total Cost
-            ctk.CTkLabel(new_proj_frame, text="Total Project Investment:", font=config.FONT_BODY, text_color=config.COLOR_TEXT).pack(pady=(5, 0))
-            cost_entry = ctk.CTkEntry(new_proj_frame, width=150, font=config.FONT_BODY, placeholder_text="10,000,000")
-            cost_entry.pack()
-            ctk.CTkLabel(new_proj_frame, text="💰 10% upfront cash + 90% added to debt", font=config.FONT_BODY, text_color=config.COLOR_GOLD).pack()
-            ctk.CTkLabel(new_proj_frame, text="⚠️ Pick your timeline carefully - speed vs. safety trade-off", font=config.FONT_BODY, text_color=config.COLOR_ACCENT_DANGER).pack(pady=(0, 5))
-
-            # Project Type
-            type_options = {"R&D (Tech/Innovation)": 1, "Marketing (Customer/Rep)": 2, "Operations (Efficiency)": 3}
-            type_var = ctk.StringVar(value=list(type_options.keys())[0])
-            ctk.CTkLabel(new_proj_frame, text="Project Type:", font=config.FONT_BODY, text_color=config.COLOR_TEXT).pack(pady=(5, 0))
-            type_menu = ctk.CTkOptionMenu(new_proj_frame, variable=type_var, values=list(type_options.keys()), width=300, font=config.FONT_BODY)
-            type_menu.pack()
-
-            # Duration (dropdown with fixed options)
-            duration_options = ["10 days (90% risk)", "20 days (80% risk)", "30 days (70% risk)", 
-                              "40 days (60% risk)", "50 days (50% risk)", "60 days (40% risk)",
-                              "70 days (30% risk)", "80 days (20% risk)", "90 days (10% risk)", "100 days (5% risk)"]
-            duration_var = ctk.StringVar(value=duration_options[4])  # Default to 50 days
-            ctk.CTkLabel(new_proj_frame, text="Project Timeline:", font=config.FONT_BODY, text_color=config.COLOR_TEXT).pack(pady=(5, 0))
-            duration_menu = ctk.CTkOptionMenu(new_proj_frame, variable=duration_var, values=duration_options, width=300, font=config.FONT_BODY)
-            duration_menu.pack()
-            ctk.CTkLabel(new_proj_frame, text="⏱️ Longer timelines = Lower risk, better success chance", 
-                        font=(config.FONT_FAMILY, 9), text_color=config.COLOR_SUCCESS_GREEN).pack(pady=2)
-            
-            def start_project():
-                if len(corp.projects) >= config.PROJECT_LIMIT:
-                    messagebox.showerror("Limit Reached", f"Cannot start a new project. Max limit is {config.PROJECT_LIMIT}.")
-                    return
-                try:
-                    name = name_entry.get()
-                    cost = int(cost_entry.get().replace(',', ''))
-                    p_type = type_options[type_var.get()]
-                    
-                    # Parse duration from selected option (e.g., "50 days (50% risk)" -> 50)
-                    duration_text = duration_var.get()
-                    duration = int(duration_text.split()[0])
-                    
-                    # Calculate risk: 10 days = 90%, 20 days = 80%, ..., 100 days = 5%
-                    # Formula: risk = (110 - duration) / 100
-                    risk = (110 - duration) / 100
-                    # Clamp between 0.05 and 0.90
-                    risk = max(0.05, min(0.90, risk))
-
-                    if not name or cost <= 0:
-                        raise ValueError
-                        
-                    upfront_cost = cost * 0.1
-                    debt_amount = cost * 0.9  # 90% goes to debt
-
-                    if corp.cash < upfront_cost:
-                        messagebox.showerror("Error", f"Insufficient Cash. Upfront cost is ${upfront_cost:,.0f}.")
-                        return
-                    
-                    if corp.debt + debt_amount > corp.max_debt_limit:
-                        messagebox.showerror("Error", f"Project would exceed debt limit. Need ${debt_amount:,.0f} in available credit.")
-                        return
-
-                    new_project = Project(name, cost, risk, duration, p_type)
-                    corp.cash -= upfront_cost
-                    corp.debt += debt_amount  # Add 90% to debt
-                    corp.log.append(f"Project '{name}' started: ${upfront_cost:,.0f} cash + ${debt_amount:,.0f} debt ({duration} days, {risk:.0%} risk)")
-                    corp.projects.append(new_project)
-                    messagebox.showinfo("Project Started", 
-                        f"Strategic Project '{name}' initiated.\n\n" +
-                        f"Upfront: ${upfront_cost:,.0f}\n" +
-                        f"Financed: ${debt_amount:,.0f} (added to debt)\n" +
-                        f"Duration: {duration} days\n" +
-                        f"Risk Level: {risk:.0%}")
-                    name_entry.delete(0, ctk.END)
-                    cost_entry.delete(0, ctk.END)
-                    self._update_status()
-                    rnd_window.grab_set()
-                except ValueError:
-                    messagebox.showerror("Input Error", "Please ensure all fields are valid: Name is set and Cost is a positive integer.")
-
-            ctk.CTkButton(new_proj_frame, text="Start Project", command=start_project, 
-                          fg_color=config.COLOR_SUCCESS_GREEN, hover_color=("#4CAF50"), 
-                          font=config.FONT_HEADER, width=250).pack(pady=20)
-
-
         # Initial call to set up the investment section
         update_rnd_status()
         
-        ctk.CTkButton(rnd_window, text="Close", command=rnd_window.destroy, fg_color=config.COLOR_ACCENT_NEUTRAL, font=config.FONT_HEADER).pack(pady=10)
+        # --- LAUNCH NEW TAB ---
+        launch_tab = tabview.add('Launch New')
+        
+        # Single unified launch form
+        launch_container = ctk.CTkFrame(launch_tab, fg_color='transparent')
+        launch_container.pack(fill='both', expand=True, padx=20, pady=10)
+        
+        # Centered form
+        form_col = ctk.CTkFrame(launch_container, fg_color=config.COLOR_PANEL_BG, corner_radius=10)
+        form_col.pack(fill='both', expand=True, padx=100)
+        
+        if len(corp.projects) >= config.PROJECT_LIMIT:
+            ctk.CTkLabel(form_col, text=f'Project Limit Reached: {config.PROJECT_LIMIT}', font=config.FONT_TITLE, text_color=config.COLOR_ACCENT_DANGER).pack(pady=20)
+        else:
+            ctk.CTkLabel(form_col, text='🚀 Launch New Project', font=config.FONT_HEADER, text_color=config.COLOR_ACCENT_PRIMARY).pack(pady=15)
+            
+            # Simplified info text
+            info_text = 'All projects start in Development, then enter the market to generate revenue.'
+            ctk.CTkLabel(form_col, text=info_text, font=(config.FONT_FAMILY, 11), 
+                        text_color=config.COLOR_ACCENT_NEUTRAL, justify='center').pack(pady=(0, 20))
+            
+            # Name
+            ctk.CTkLabel(form_col, text='Project Name:', font=config.FONT_BODY, text_color=config.COLOR_TEXT).pack(pady=(10, 0))
+            name_entry = ctk.CTkEntry(form_col, width=350, font=config.FONT_BODY)
+            name_entry.pack()
+
+            # Total Investment
+            ctk.CTkLabel(form_col, text='Total Investment:', font=config.FONT_BODY, text_color=config.COLOR_TEXT).pack(pady=(15, 0))
+            cost_entry = ctk.CTkEntry(form_col, width=350, font=config.FONT_BODY, placeholder_text='e.g., 10000000')
+            cost_entry.pack()
+            ctk.CTkLabel(form_col, text='10% upfront cash, 90% debt financing', 
+                        font=(config.FONT_FAMILY, 9), text_color=config.COLOR_GOLD).pack()
+
+            # Price Point
+            ctk.CTkLabel(form_col, text='Price Point per Unit:', font=config.FONT_BODY, text_color=config.COLOR_TEXT).pack(pady=(15, 0))
+            price_entry = ctk.CTkEntry(form_col, width=350, font=config.FONT_BODY, placeholder_text='e.g., 100000')
+            price_entry.pack()
+
+            # Project Type
+            type_options = {'R&D (Higher Quality)': 1, 'Marketing (Brand Boost)': 2, 'Operations (Efficiency)': 3}
+            type_var = ctk.StringVar(value=list(type_options.keys())[0])
+            ctk.CTkLabel(form_col, text='Project Type:', font=config.FONT_BODY, text_color=config.COLOR_TEXT).pack(pady=(15, 0))
+            type_menu = ctk.CTkOptionMenu(form_col, variable=type_var, values=list(type_options.keys()), width=350, font=config.FONT_BODY)
+            type_menu.pack()
+
+            # Development Timeline - simplified
+            duration_options = {
+                '5 days (Lightning, high risk)': (5, 1.00),
+                '15 days (Fast, risky)': (15, 0.85),
+                '25 days (Balanced)': (25, 0.65),
+                '35 days (Steady)': (35, 0.50),
+                '50 days (Safe)': (50, 0.35)
+            }
+            duration_var = ctk.StringVar(value='25 days (Balanced)')
+            ctk.CTkLabel(form_col, text='Development Timeline:', font=config.FONT_BODY, text_color=config.COLOR_TEXT).pack(pady=(15, 0))
+            duration_menu = ctk.CTkOptionMenu(form_col, variable=duration_var, values=list(duration_options.keys()), width=350, font=config.FONT_BODY)
+            duration_menu.pack()
+            ctk.CTkLabel(form_col, text='Shorter = faster to market; longer = safer quality', 
+                        font=(config.FONT_FAMILY, 9), text_color=config.COLOR_SUCCESS_GREEN).pack(pady=(2, 5))
+            
+            def launch_unified_project():
+                if len(corp.projects) >= config.PROJECT_LIMIT:
+                    messagebox.showerror('Limit Reached', f'Cannot start a new project. Max limit is {config.PROJECT_LIMIT}.')
+                    return
+                try:
+                    name = name_entry.get().strip()
+                    if not name:
+                        raise ValueError("Name cannot be empty")
+                    
+                    investment = int(cost_entry.get().replace(',', ''))
+                    base_price = int(price_entry.get().replace(',', ''))
+                    p_type = type_options[type_var.get()]
+                    
+                    # Get development days and risk from selected option
+                    development_days, risk = duration_options[duration_var.get()]
+
+                    if investment <= 0 or base_price <= 0:
+                        raise ValueError("Investment and price must be positive")
+                        
+                    upfront_cost = investment * 0.1
+                    debt_amount = investment * 0.9
+
+                    if corp.cash < upfront_cost:
+                        messagebox.showerror('Insufficient Cash', f'Need ${upfront_cost:,.0f} upfront. You have ${corp.cash:,.0f}.')
+                        return
+                    
+                    if corp.debt + debt_amount > corp.max_debt_limit:
+                        messagebox.showerror('Debt Limit', f'Project would exceed debt limit of ${corp.max_debt_limit:,.0f}.')
+                        return
+
+                    # Launch using unified system
+                    success, msg = corp.launch_project(name, investment, base_price, development_days, p_type)
+                    
+                    if success:
+                        corp.cash -= upfront_cost
+                        corp.debt += debt_amount
+                        
+                        daily_cost = investment / development_days
+                        messagebox.showinfo("Project Started!", 
+                            f"'{name}' is now in Development!\n\n" +
+                            f"Upfront: ${upfront_cost:,.0f}\n" +
+                            f"Financed: ${debt_amount:,.0f}\n" +
+                            f"Daily Cost: ${daily_cost:,.0f}\n" +
+                            f"Duration: {development_days} days\n" +
+                            f"Risk: {risk:.0%}")
+                        
+                        name_entry.delete(0, ctk.END)
+                        cost_entry.delete(0, ctk.END)
+                        price_entry.delete(0, ctk.END)
+                        self._update_status()
+                        hub_window.grab_set()
+                    else:
+                        messagebox.showerror('Launch Failed', msg)
+                        
+                except ValueError as e:
+                    messagebox.showerror("Input Error", f"Please check your inputs: {e}")
+
+            ctk.CTkButton(form_col, text='🚀 Launch Project', command=launch_unified_project, 
+                          fg_color=config.COLOR_SUCCESS_GREEN, hover_color=('#4CAF50'), 
+                          font=config.FONT_HEADER, width=250, height=40).pack(pady=20)
+        
+        ctk.CTkButton(hub_window, text='Close', command=hub_window.destroy, fg_color=config.COLOR_ACCENT_NEUTRAL, font=config.FONT_HEADER).pack(pady=10)
 
 
     def _open_budget_dialog(self):
@@ -2564,7 +3099,9 @@ class CEOGameApp:
             messagebox.showwarning("No Actions Remaining", "You have no daily actions left. Advance to the next day or hire employees to automate tasks.")
             return
         
-        # Deduct action point
+        # Confirm overlap with employee-assigned budgeting before spending a point
+        if not self._confirm_employee_overlap('budget'):
+            return
         corp.action_points -= 1
         self._update_status()
         
@@ -2672,7 +3209,9 @@ class CEOGameApp:
             messagebox.showwarning("No Actions Remaining", "You have no daily actions left. Advance to the next day or hire employees to automate tasks.")
             return
         
-        # Deduct action point
+        # Confirm overlap with finance/budgeting before spending a point
+        if not self._confirm_employee_overlap('budget'):
+            return
         corp.action_points -= 1
         self._update_status()
         
@@ -2819,7 +3358,9 @@ class CEOGameApp:
             messagebox.showwarning("No Actions Remaining", "You have no daily actions left. Advance to the next day or hire employees to automate tasks.")
             return
         
-        # Deduct action point
+        # Confirm overlap with marketing before spending a point
+        if not self._confirm_employee_overlap('marketing'):
+            return
         corp.action_points -= 1
         self._update_status()
         
@@ -2879,7 +3420,9 @@ class CEOGameApp:
             messagebox.showwarning("No Actions Remaining", "You have no daily actions left. Advance to the next day or hire employees to automate tasks.")
             return
         
-        # Deduct action point
+        # Confirm overlap with marketing/morale-type tasks before spending a point
+        if not self._confirm_employee_overlap('marketing'):
+            return
         corp.action_points -= 1
         self._update_status()
         
@@ -2927,113 +3470,7 @@ class CEOGameApp:
         ctk.CTkButton(expense_window, text="Close", command=expense_window.destroy, fg_color=config.COLOR_ACCENT_NEUTRAL, font=config.FONT_HEADER).pack(pady=5)
 
 
-    def _open_exec_team_dialog(self):
-        """Executive Team hiring dialog for C-suite officers."""
-        corp = self.game
-        
-        # Check action points
-        if corp.action_points <= 0:
-            messagebox.showwarning("No Actions Remaining", "You have no daily actions left.")
-            return
-        
-        # Deduct action point
-        corp.action_points -= 1
-        self._update_status()
-        
-        exec_window = ctk.CTkToplevel(self.master)
-        exec_window.title("Executive Team")
-        exec_window.geometry("1000x700")
-        exec_window.attributes('-topmost', True)
-        exec_window.grab_set()
-        self._set_window_icon(exec_window)
 
-        ctk.CTkLabel(exec_window, text="👔 Executive Team (C-Suite)", font=config.FONT_TITLE, text_color=config.COLOR_ACCENT_PRIMARY).pack(pady=10)
-        
-        # Show current executives
-        current_frame = ctk.CTkFrame(exec_window, fg_color=config.COLOR_PANEL_BG)
-        current_frame.pack(fill='x', padx=15, pady=10)
-        ctk.CTkLabel(current_frame, text="Current C-Suite:", font=config.FONT_HEADER, text_color=config.COLOR_GOLD).pack(anchor='w', padx=10, pady=5)
-        
-        if not corp.executives:
-            ctk.CTkLabel(current_frame, text="No executives hired yet.", font=config.FONT_BODY, text_color=config.COLOR_ACCENT_NEUTRAL).pack(padx=10, pady=5)
-        else:
-            for exec in corp.executives:
-                row = ctk.CTkFrame(current_frame, fg_color="transparent")
-                row.pack(fill='x', padx=10, pady=3)
-                ctk.CTkLabel(row, text=f"{exec.role}: {exec.name} ({exec.personality})", font=config.FONT_HEADER, anchor='w').pack(side=ctk.LEFT, padx=5)
-                ctk.CTkLabel(row, text=f"Satisfaction: {exec.satisfaction}%", font=config.FONT_BODY, text_color=config.COLOR_SUCCESS_GREEN if exec.satisfaction > 70 else config.COLOR_ACCENT_DANGER).pack(side=ctk.RIGHT, padx=5)
-        
-        # Scrollable candidates area
-        ctk.CTkLabel(exec_window, text="Available Candidates:", font=config.FONT_HEADER).pack(pady=(10, 5))
-        scroll_frame = ctk.CTkScrollableFrame(exec_window, fg_color="transparent", height=450)
-        scroll_frame.pack(fill='both', expand=True, padx=15, pady=5)
-        
-        def hire_exec(role, candidate):
-            # Check if role already filled
-            if role == "CFO" and corp.cfo:
-                messagebox.showwarning("Position Filled", "CFO position already filled.")
-                return
-            if role == "CTO" and corp.cto:
-                messagebox.showwarning("Position Filled", "CTO position already filled.")
-                return
-            if role == "CMO" and corp.cmo:
-                messagebox.showwarning("Position Filled", "CMO position already filled.")
-                return
-            
-            # Check action points
-            if corp.action_points < 1:
-                messagebox.showwarning("No Action Points", "Hiring executives requires 1 action point.")
-                return
-            
-            cost = candidate['cost']
-            if corp.cash < cost:
-                messagebox.showwarning("Insufficient Cash", f"Need ${cost:,.0f} to hire this executive.")
-                return
-            
-            corp.cash -= cost
-            corp.action_points -= 1
-            from game_core import Executive
-            exec_obj = Executive(candidate['name'], role, cost, candidate['personality'])
-            exec_obj.hired_day = corp.day
-            corp.executives.append(exec_obj)
-            
-            if role == "CFO":
-                corp.cfo = exec_obj
-            elif role == "CTO":
-                corp.cto = exec_obj
-            elif role == "CMO":
-                corp.cmo = exec_obj
-            
-            corp.log.append(f"Hired {exec_obj.name} as {role}. Personality: {exec_obj.personality}. -1 action point.")
-            messagebox.showinfo("Hire Success", f"{exec_obj.name} hired as {role}!")
-            exec_window.destroy()
-            self._update_status()
-        
-        # Display candidates by role
-        for role in ["CFO", "CTO", "CMO"]:
-            role_frame = ctk.CTkFrame(scroll_frame, fg_color=config.COLOR_PANEL_BG, corner_radius=10)
-            role_frame.pack(fill='x', pady=10)
-            
-            ctk.CTkLabel(role_frame, text=f"{role} Candidates", font=config.FONT_HEADER, text_color=config.COLOR_GOLD).pack(anchor='w', padx=10, pady=8)
-            
-            for candidate in config.EXECUTIVE_CANDIDATES[role]:
-                card = ctk.CTkFrame(role_frame, fg_color=config.COLOR_MAIN_BG, corner_radius=8)
-                card.pack(fill='x', padx=10, pady=5)
-                
-                top_row = ctk.CTkFrame(card, fg_color="transparent")
-                top_row.pack(fill='x', padx=10, pady=8)
-                
-                ctk.CTkLabel(top_row, text=candidate['name'], font=config.FONT_HEADER, text_color=config.COLOR_TEXT).pack(side=ctk.LEFT)
-                ctk.CTkLabel(top_row, text=f"${candidate['cost']/1000000:.0f}M", font=config.FONT_HEADER, text_color=config.COLOR_GOLD).pack(side=ctk.RIGHT)
-                
-                ctk.CTkLabel(card, text=f"Personality: {candidate['personality']}", font=config.FONT_BODY, text_color=config.COLOR_ACCENT_PRIMARY).pack(anchor='w', padx=10)
-                ctk.CTkLabel(card, text=candidate['description'], font=config.FONT_BODY, text_color=config.COLOR_ACCENT_NEUTRAL, wraplength=900, justify='left').pack(anchor='w', padx=10, pady=(0, 5))
-                
-                ctk.CTkButton(card, text="Hire", command=lambda r=role, c=candidate: hire_exec(r, c),
-                            fg_color=config.COLOR_SUCCESS_GREEN, hover_color=("#4CAF50"), width=100, height=32).pack(padx=10, pady=(0, 8))
-        
-        ctk.CTkButton(exec_window, text="Close", command=exec_window.destroy, fg_color=config.COLOR_ACCENT_NEUTRAL, font=config.FONT_HEADER).pack(pady=10)
-    
     def _open_union_dialog(self):
         """Union negotiation dialog."""
         corp = self.game
@@ -3098,6 +3535,437 @@ class CEOGameApp:
         
         ctk.CTkButton(union_window, text="Close", command=union_window.destroy, fg_color=config.COLOR_ACCENT_NEUTRAL, font=config.FONT_HEADER).pack(pady=10)
     
+    def _show_board_overview(self):
+        """Display detailed board member information with trust and satisfaction levels."""
+        board_window = ctk.CTkToplevel(self.master)
+        board_window.title("Board of Directors Overview")
+        board_window.geometry("950x750")
+        board_window.attributes('-topmost', True)
+        self._set_window_icon(board_window)
+        board_window.grab_set()
+        
+        # Configure window background
+        board_window.configure(fg_color=config.COLOR_MAIN_BG)
+        
+        # Header
+        header_frame = ctk.CTkFrame(board_window, fg_color=config.COLOR_HEADER_BG, corner_radius=0)
+        header_frame.pack(fill='x', pady=(0, 15))
+        ctk.CTkLabel(header_frame, text="📋 BOARD OF DIRECTORS", 
+                    font=config.FONT_TITLE, text_color=config.COLOR_TEXT).pack(pady=15)
+        
+        # Scrollable frame for board members
+        scroll_frame = ctk.CTkScrollableFrame(board_window, fg_color=config.COLOR_MAIN_BG)
+        scroll_frame.pack(fill='both', expand=True, padx=15, pady=(0, 10))
+        
+        # Debug: Print board member count
+        print(f"DEBUG: Found {len(self.game.board_members)} board members")
+        
+        # Display each board member
+        for i, member in enumerate(self.game.board_members):
+            print(f"DEBUG: Creating card for member {i}: {member.name}")
+            # Member card
+            member_card = ctk.CTkFrame(scroll_frame, fg_color=config.COLOR_PANEL_BG, 
+                                      corner_radius=10, border_width=2, 
+                                      border_color=config.COLOR_ACCENT_NEUTRAL)
+            member_card.pack(fill='x', pady=8, padx=5)
+            
+            # Member header with name and title - REMOVED pack_propagate(False)
+            header = ctk.CTkFrame(member_card, fg_color=config.COLOR_HEADER_BG, corner_radius=8)
+            header.pack(fill='x', padx=12, pady=(12, 8))
+            
+            ctk.CTkLabel(header, text=f"{member.name} - {member.title}", 
+                        font=config.FONT_HEADER, text_color=config.COLOR_GOLD).pack(pady=10, padx=15)
+            
+            # Personality - simplified without extra frame
+            ctk.CTkLabel(member_card, text=f"Personality Type: {member.personality}", 
+                        font=config.FONT_STAT_VALUE, text_color=config.COLOR_ACCENT_PRIMARY,
+                        anchor='w').pack(fill='x', padx=20, pady=(5, 3))
+            
+            # Background description - simplified
+            ctk.CTkLabel(member_card, text=member.background, 
+                        font=config.FONT_BODY, text_color=config.COLOR_TEXT,
+                        wraplength=820, anchor='w', justify='left').pack(fill='x', padx=20, pady=(0, 10))
+            
+            # Metrics container
+            metrics_container = ctk.CTkFrame(member_card, fg_color=("#1A1A2E"), corner_radius=8)
+            metrics_container.pack(fill='x', padx=15, pady=(5, 10))
+            
+            # Trust metric
+            trust_container = ctk.CTkFrame(metrics_container, fg_color="transparent")
+            trust_container.pack(fill='x', padx=15, pady=(12, 5))
+            
+            ctk.CTkLabel(trust_container, text=f"Trust Level: {member.trust}/100", 
+                        font=config.FONT_STAT_VALUE, text_color=config.COLOR_TEXT,
+                        width=150, anchor='w').pack(side='left', padx=(0, 15))
+            
+            trust_color = self._get_metric_color(member.trust)
+            trust_bar = ctk.CTkProgressBar(trust_container, width=550, height=22, 
+                                          progress_color=trust_color, 
+                                          fg_color=("#2A2A3E"))
+            trust_bar.pack(side='left', fill='x', expand=True)
+            trust_bar.set(member.trust / 100)
+            
+            # Satisfaction metric
+            sat_container = ctk.CTkFrame(metrics_container, fg_color="transparent")
+            sat_container.pack(fill='x', padx=15, pady=(5, 12))
+            
+            ctk.CTkLabel(sat_container, text=f"Satisfaction: {member.satisfaction}/100", 
+                        font=config.FONT_STAT_VALUE, text_color=config.COLOR_TEXT,
+                        width=150, anchor='w').pack(side='left', padx=(0, 15))
+            
+            sat_color = self._get_metric_color(member.satisfaction)
+            sat_bar = ctk.CTkProgressBar(sat_container, width=550, height=22,
+                                        progress_color=sat_color,
+                                        fg_color=("#2A2A3E"))
+            sat_bar.pack(side='left', fill='x', expand=True)
+            sat_bar.set(member.satisfaction / 100)
+            
+            # Voting tendencies section
+            voting_container = ctk.CTkFrame(member_card, fg_color=("#0F1419"), 
+                                           corner_radius=6, border_width=1,
+                                           border_color=config.COLOR_ACCENT_NEUTRAL)
+            voting_container.pack(fill='x', padx=15, pady=(5, 12))
+            
+            ctk.CTkLabel(voting_container, text="⚖️  Voting Tendencies:", 
+                        font=config.FONT_STAT_VALUE, 
+                        text_color=config.COLOR_GOLD).pack(anchor='w', padx=15, pady=(8, 5))
+            
+            tendencies_text = self._format_voting_tendencies(member.voting_preferences)
+            ctk.CTkLabel(voting_container, text=tendencies_text, 
+                        font=config.FONT_BODY, text_color=config.COLOR_TEXT,
+                        anchor='w', justify='left').pack(anchor='w', padx=25, pady=(0, 10))
+        
+        # Close button at bottom
+        ctk.CTkButton(board_window, text="Close", command=board_window.destroy,
+                     fg_color=config.COLOR_ACCENT_NEUTRAL, hover_color=("#A0A0A0"),
+                     font=config.FONT_HEADER, height=45, width=200).pack(pady=15)
+    
+    def _get_metric_color(self, value):
+        """Return color based on metric value (0-100)."""
+        if value >= 70:
+            return config.COLOR_SUCCESS_GREEN
+        elif value >= 40:
+            return config.COLOR_GOLD
+        else:
+            return config.COLOR_ACCENT_DANGER
+    
+    def _format_voting_tendencies(self, preferences):
+        """Format voting preferences into readable text."""
+        tendency_map = {
+            "acquisitions": "Acquisitions",
+            "debt": "Taking Debt",
+            "layoffs": "Layoffs",
+            "expansion": "Expansion",
+            "dividends": "Dividends"
+        }
+        
+        lines = []
+        for key, value in preferences.items():
+            label = tendency_map.get(key, key)
+            if value > 15:
+                stance = "Strongly Favors"
+                color_symbol = "✓✓"
+            elif value > 0:
+                stance = "Favors"
+                color_symbol = "✓"
+            elif value > -15:
+                stance = "Opposes"
+                color_symbol = "✗"
+            else:
+                stance = "Strongly Opposes"
+                color_symbol = "✗✗"
+            
+            lines.append(f"{color_symbol} {label}: {stance}")
+        
+        return "\n".join(lines)
+    
+    def _show_wall_street(self):
+        """Display Wall Street leaderboard with all companies ranked by stock price."""
+        ws_window = ctk.CTkToplevel(self.master)
+        ws_window.title("📈 Wall Street Leaderboard")
+        ws_window.geometry("1000x800")
+        ws_window.attributes('-topmost', True)
+        self._set_window_icon(ws_window)
+        ws_window.grab_set()
+        
+        ws_window.configure(fg_color=config.COLOR_MAIN_BG)
+        
+        # Header
+        header_frame = ctk.CTkFrame(ws_window, fg_color=config.COLOR_HEADER_BG, corner_radius=0)
+        header_frame.pack(fill='x', pady=(0, 15))
+        ctk.CTkLabel(header_frame, text="📈 WALL STREET LEADERBOARD", 
+                    font=config.FONT_TITLE, text_color=config.COLOR_TEXT).pack(pady=15)
+        
+        # Get all companies and sort by stock price
+        all_companies = []
+        for comp in self.game.competitors:
+            all_companies.append({
+                'name': comp.name,
+                'stock_price': comp.stock_price,
+                'strategy': comp.strategy,
+                'is_player': False
+            })
+        
+        # Add player company
+        all_companies.append({
+            'name': self.game.corp_name or "Your Company",
+            'stock_price': self.game.stock_price,
+            'strategy': 'Player',
+            'is_player': True
+        })
+        
+        # Sort by stock price descending
+        all_companies.sort(key=lambda x: x['stock_price'], reverse=True)
+        
+        # Find player rank
+        player_rank = None
+        for i, comp in enumerate(all_companies):
+            if comp['is_player']:
+                player_rank = i + 1
+                break
+        
+        # Stats panel
+        stats_frame = ctk.CTkFrame(ws_window, fg_color=config.COLOR_PANEL_BG, corner_radius=10)
+        stats_frame.pack(fill='x', padx=15, pady=(0, 10))
+        
+        stats_grid = ctk.CTkFrame(stats_frame, fg_color="transparent")
+        stats_grid.pack(pady=15, padx=20)
+        
+        # Player stats
+        ctk.CTkLabel(stats_grid, text="Your Rank:", font=config.FONT_STAT_VALUE, 
+                    text_color=config.COLOR_ACCENT_PRIMARY).grid(row=0, column=0, padx=20, sticky='e')
+        rank_color = config.COLOR_SUCCESS_GREEN if player_rank <= 3 else (config.COLOR_GOLD if player_rank <= 6 else config.COLOR_ACCENT_DANGER)
+        ctk.CTkLabel(stats_grid, text=f"#{player_rank} of 13", font=config.FONT_STAT_VALUE, 
+                    text_color=rank_color).grid(row=0, column=1, padx=20, sticky='w')
+        
+        ctk.CTkLabel(stats_grid, text="Your Stock Price:", font=config.FONT_STAT_VALUE, 
+                    text_color=config.COLOR_ACCENT_PRIMARY).grid(row=0, column=2, padx=20, sticky='e')
+        ctk.CTkLabel(stats_grid, text=f"${self.game.stock_price:.2f}", font=config.FONT_STAT_VALUE, 
+                    text_color=config.COLOR_TEXT).grid(row=0, column=3, padx=20, sticky='w')
+        
+        ctk.CTkLabel(stats_grid, text="Credit Rating:", font=config.FONT_STAT_VALUE, 
+                    text_color=config.COLOR_ACCENT_PRIMARY).grid(row=1, column=0, padx=20, sticky='e')
+        ctk.CTkLabel(stats_grid, text=self.game.credit_rating, font=config.FONT_STAT_VALUE, 
+                    text_color=config.COLOR_TEXT).grid(row=1, column=1, padx=20, sticky='w')
+        
+        ctk.CTkLabel(stats_grid, text="Analyst Rating:", font=config.FONT_STAT_VALUE, 
+                    text_color=config.COLOR_ACCENT_PRIMARY).grid(row=1, column=2, padx=20, sticky='e')
+        ctk.CTkLabel(stats_grid, text=self.game.analyst_rating, font=config.FONT_STAT_VALUE, 
+                    text_color=config.COLOR_TEXT).grid(row=1, column=3, padx=20, sticky='w')
+        
+        # Victory message if player is #1
+        if player_rank == 1:
+            victory_frame = ctk.CTkFrame(ws_window, fg_color=("#1A472A"), corner_radius=10, border_width=3, border_color=config.COLOR_SUCCESS_GREEN)
+            victory_frame.pack(fill='x', padx=15, pady=(0, 10))
+            ctk.CTkLabel(victory_frame, text="🏆 CONGRATULATIONS! YOU'VE REACHED #1 ON WALL STREET! 🏆", 
+                        font=config.FONT_TITLE, text_color=config.COLOR_SUCCESS_GREEN).pack(pady=15)
+            ctk.CTkLabel(victory_frame, text="You are now the most valuable company in the market!", 
+                        font=config.FONT_HEADER, text_color=config.COLOR_TEXT).pack(pady=(0, 15))
+        
+        # Leaderboard title
+        ctk.CTkLabel(ws_window, text="Company Rankings:", font=config.FONT_HEADER, 
+                    text_color=config.COLOR_GOLD).pack(pady=(5, 5))
+        
+        # Scrollable leaderboard
+        scroll_frame = ctk.CTkScrollableFrame(ws_window, fg_color=config.COLOR_MAIN_BG)
+        scroll_frame.pack(fill='both', expand=True, padx=15, pady=(0, 10))
+        
+        # Display each company
+        for i, comp in enumerate(all_companies):
+            rank = i + 1
+            
+            # Determine card colors
+            if comp['is_player']:
+                card_bg = ("#1E3A5F")
+                border_color = config.COLOR_ACCENT_PRIMARY
+                border_width = 3
+            elif rank == 1:
+                card_bg = ("#1A472A")
+                border_color = config.COLOR_SUCCESS_GREEN
+                border_width = 2
+            else:
+                card_bg = config.COLOR_PANEL_BG
+                border_color = config.COLOR_ACCENT_NEUTRAL
+                border_width = 1
+            
+            # Company card
+            company_card = ctk.CTkFrame(scroll_frame, fg_color=card_bg, 
+                                       corner_radius=8, border_width=border_width, 
+                                       border_color=border_color)
+            company_card.pack(fill='x', pady=4, padx=5)
+            
+            # Card content
+            card_content = ctk.CTkFrame(company_card, fg_color="transparent")
+            card_content.pack(fill='x', padx=15, pady=12)
+            
+            # Rank
+            rank_color = config.COLOR_SUCCESS_GREEN if rank <= 3 else config.COLOR_GOLD if rank <= 6 else config.COLOR_TEXT
+            rank_text = f"#{rank}"
+            if comp['is_player']:
+                rank_text += " ⭐ YOU"
+            ctk.CTkLabel(card_content, text=rank_text, font=config.FONT_TITLE, 
+                        text_color=rank_color, width=100).pack(side='left', padx=(0, 20))
+            
+            # Company name
+            name_frame = ctk.CTkFrame(card_content, fg_color="transparent")
+            name_frame.pack(side='left', fill='x', expand=True)
+            ctk.CTkLabel(name_frame, text=comp['name'], font=config.FONT_HEADER, 
+                        text_color=config.COLOR_TEXT, anchor='w').pack(anchor='w')
+            strategy_text = "Your Company" if comp['is_player'] else f"Strategy: {comp['strategy'].title()}"
+            ctk.CTkLabel(name_frame, text=strategy_text, font=config.FONT_BODY, 
+                        text_color=config.COLOR_ACCENT_NEUTRAL, anchor='w').pack(anchor='w')
+            
+            # Stock price
+            ctk.CTkLabel(card_content, text=f"${comp['stock_price']:.2f}", 
+                        font=config.FONT_TITLE, text_color=config.COLOR_GOLD, 
+                        width=150, anchor='e').pack(side='right')
+        
+        # Close button
+        ctk.CTkButton(ws_window, text="Close", command=ws_window.destroy,
+                     fg_color=config.COLOR_ACCENT_NEUTRAL, hover_color=("#A0A0A0"),
+                     font=config.FONT_HEADER, height=45, width=200).pack(pady=15)
+    
+    def _on_closing(self):
+        """Handle window close event - cleanup all scheduled callbacks."""
+        self.is_running = False
+        
+        # Cancel all scheduled callbacks
+        for callback_id in self.scheduled_callbacks:
+            try:
+                self.master.after_cancel(callback_id)
+            except Exception:
+                pass
+        
+        # Clear the list
+        self.scheduled_callbacks.clear()
+        
+        # Destroy the window
+        try:
+            self.master.destroy()
+        except Exception:
+            pass
+
+    def _open_upgrades_dialog(self):
+        """Open the Executive Upgrades skill tree dialog."""
+        corp = self.game
+        
+        upgrade_window = ctk.CTkToplevel(self.master)
+        upgrade_window.title("⭐ Executive Upgrades - Skill Tree")
+        upgrade_window.geometry("900x700")
+        upgrade_window.attributes('-topmost', True)
+        upgrade_window.grab_set()
+        self._set_window_icon(upgrade_window)
+        
+        # Header
+        header = ctk.CTkFrame(upgrade_window, fg_color=config.COLOR_GOLD, corner_radius=0)
+        header.pack(fill='x')
+        ctk.CTkLabel(header, text=f"⭐ EXECUTIVE UPGRADES - PERMANENT BONUSES", 
+                    font=(config.FONT_FAMILY, 20, "bold"), text_color="white").pack(pady=12)
+        
+        # Points display
+        points_frame = ctk.CTkFrame(upgrade_window, fg_color=config.COLOR_PANEL_BG)
+        points_frame.pack(fill='x', padx=15, pady=10)
+        ctk.CTkLabel(points_frame, text=f"🌟 Executive Points: {corp.executive_points}",
+                    font=(config.FONT_FAMILY, 16, "bold"), text_color=config.COLOR_GOLD).pack(pady=8)
+        ctk.CTkLabel(points_frame, text="Earn points from milestones, profitable days, and achievements!",
+                    font=config.FONT_BODY, text_color=config.COLOR_ACCENT_NEUTRAL).pack(pady=(0, 8))
+        
+        # Upgrade tree (scrollable)
+        scroll = ctk.CTkScrollableFrame(upgrade_window, fg_color="transparent")
+        scroll.pack(fill='both', expand=True, padx=15, pady=(0, 10))
+        
+        # Define upgrade tree
+        upgrades = [
+            # FINANCE TREE
+            {"category": "FINANCE", "upgrades": [
+                {"id": "revenue1", "name": "Revenue Boost I", "cost": 10, "bonus": "revenue_boost", "value": 10, "desc": "+10% daily revenue"},
+                {"id": "revenue2", "name": "Revenue Boost II", "cost": 25, "bonus": "revenue_boost", "value": 25, "desc": "+25% daily revenue", "requires": "revenue1"},
+                {"id": "cost1", "name": "Cost Reduction I", "cost": 15, "bonus": "cost_reduction", "value": 10, "desc": "-10% daily costs"},
+                {"id": "cost2", "name": "Cost Reduction II", "cost": 30, "bonus": "cost_reduction", "value": 20, "desc": "-20% daily costs", "requires": "cost1"},
+                {"id": "interest1", "name": "Better Credit", "cost": 20, "bonus": "interest_reduction", "value": 25, "desc": "-25% interest rates"},
+            ]},
+            # GROWTH TREE
+            {"category": "GROWTH", "upgrades": [
+                {"id": "stock1", "name": "Stock Momentum I", "cost": 12, "bonus": "stock_boost", "value": 15, "desc": "+15% stock price growth"},
+                {"id": "stock2", "name": "Stock Momentum II", "cost": 28, "bonus": "stock_boost", "value": 35, "desc": "+35% stock price growth", "requires": "stock1"},
+                {"id": "customer1", "name": "Customer Magnet", "cost": 15, "bonus": "customer_growth", "value": 5, "desc": "Passive +0.5% customer growth"},
+                {"id": "customer2", "name": "Market Domination", "cost": 35, "bonus": "customer_growth", "value": 15, "desc": "Passive +1.5% customer growth", "requires": "customer1"},
+            ]},
+            # INNOVATION TREE
+            {"category": "INNOVATION", "upgrades": [
+                {"id": "tech1", "name": "R&D Efficiency I", "cost": 10, "bonus": "tech_speed", "value": 20, "desc": "+20% R&D progress speed"},
+                {"id": "project1", "name": "Project Success I", "cost": 18, "bonus": "project_success", "value": 15, "desc": "-15% project failure risk"},
+                {"id": "project2", "name": "Project Success II", "cost": 40, "bonus": "project_success", "value": 35, "desc": "-35% project failure risk", "requires": "project1"},
+            ]},
+            # LEADERSHIP TREE
+            {"category": "LEADERSHIP", "upgrades": [
+                {"id": "health1", "name": "Executive Wellness", "cost": 8, "bonus": "health_regen", "value": 0.5, "desc": "+0.5 health regen/day"},
+                {"id": "health2", "name": "Peak Performance", "cost": 20, "bonus": "health_regen", "value": 1.5, "desc": "+1.5 health regen/day", "requires": "health1"},
+                {"id": "actions1", "name": "Extra Action Point", "cost": 50, "bonus": "action_points_bonus", "value": 1, "desc": "+1 action point per day"},
+            ]},
+        ]
+        
+        def can_purchase(upgrade):
+            if upgrade['id'] in corp.purchased_upgrades:
+                return False, "Already Purchased"
+            if corp.executive_points < upgrade['cost']:
+                return False, f"Need {upgrade['cost']} points"
+            if 'requires' in upgrade and upgrade['requires'] not in corp.purchased_upgrades:
+                return False, f"Requires {upgrade['requires']}"
+            return True, "Purchase"
+        
+        def purchase_upgrade(upgrade):
+            can_buy, _ = can_purchase(upgrade)
+            if not can_buy:
+                return
+            
+            corp.executive_points -= upgrade['cost']
+            corp.purchased_upgrades.append(upgrade['id'])
+            corp.upgrade_bonuses[upgrade['bonus']] += upgrade['value']
+            corp.log.append(f"✨ UPGRADE PURCHASED: {upgrade['name']} - {upgrade['desc']}")
+            
+            messagebox.showinfo("Upgrade Purchased!", f"{upgrade['name']}\n\n{upgrade['desc']}\n\nThis bonus is PERMANENT!")
+            upgrade_window.destroy()
+            self._update_status()
+        
+        # Display upgrade categories
+        for category_data in upgrades:
+            cat_frame = ctk.CTkFrame(scroll, fg_color=config.COLOR_PANEL_BG, corner_radius=10)
+            cat_frame.pack(fill='x', pady=8)
+            
+            ctk.CTkLabel(cat_frame, text=f"🎯 {category_data['category']} TREE",
+                        font=(config.FONT_FAMILY, 14, "bold"), text_color=config.COLOR_ACCENT_PRIMARY).pack(pady=(10, 5))
+            
+            for upgrade in category_data['upgrades']:
+                upgrade_card = ctk.CTkFrame(cat_frame, fg_color=('#34495E'), corner_radius=8)
+                upgrade_card.pack(fill='x', padx=10, pady=5)
+                
+                # Header row
+                header_row = ctk.CTkFrame(upgrade_card, fg_color="transparent")
+                header_row.pack(fill='x', padx=10, pady=(8, 4))
+                
+                status = "✅" if upgrade['id'] in corp.purchased_upgrades else "🔒" if 'requires' in upgrade and upgrade['requires'] not in corp.purchased_upgrades else "⭐"
+                
+                ctk.CTkLabel(header_row, text=f"{status} {upgrade['name']}",
+                           font=(config.FONT_FAMILY, 12, "bold"), text_color="white").pack(side='left')
+                
+                cost_color = config.COLOR_SUCCESS_GREEN if corp.executive_points >= upgrade['cost'] else config.COLOR_ACCENT_DANGER
+                ctk.CTkLabel(header_row, text=f"{upgrade['cost']} Points",
+                           font=(config.FONT_FAMILY, 11, "bold"), text_color=cost_color).pack(side='right')
+                
+                # Description
+                ctk.CTkLabel(upgrade_card, text=upgrade['desc'],
+                           font=config.FONT_BODY, text_color=config.COLOR_ACCENT_NEUTRAL).pack(anchor='w', padx=10)
+                
+                # Purchase button
+                can_buy, btn_text = can_purchase(upgrade)
+                btn_fg = config.COLOR_SUCCESS_GREEN if can_buy else config.COLOR_ACCENT_NEUTRAL
+                
+                ctk.CTkButton(upgrade_card, text=btn_text, command=lambda u=upgrade: purchase_upgrade(u),
+                            fg_color=btn_fg, width=120, height=28, state="normal" if can_buy else "disabled").pack(pady=(4, 8))
+        
+        ctk.CTkButton(upgrade_window, text="Close", command=upgrade_window.destroy,
+                     fg_color=config.COLOR_ACCENT_NEUTRAL, font=config.FONT_HEADER, height=40).pack(pady=10)
 
 
 
@@ -3105,6 +3973,9 @@ class CEOGameApp:
 # This is used for quick UI testing without running full game logic.
 class MockCorporation:
     def __init__(self):
+        # Import needed for board members
+        from game_core import BoardMember
+        
         # Game State
         self.day = 1
         self.quarter = 1
@@ -3154,10 +4025,44 @@ class MockCorporation:
         self.daily_rnd_investment = {} # Added missing attribute to fix AttributeError in calculate_daily_rnd_cost
         # --- FIX END ---
         
+        # Executive Points & Upgrades
+        self.executive_points = 25  # Mock starting points for testing
+        self.purchased_upgrades = []  # List of purchased upgrade IDs
+        self.upgrade_bonuses = {
+            'revenue_boost': 0,
+            'cost_reduction': 0,
+            'stock_boost': 0,
+            'project_success': 0,
+            'debt_limit_mult': 0,
+            'interest_reduction': 0,
+            'customer_growth': 0,
+            'tech_speed': 0,
+            'action_points_bonus': 0,
+            'health_regen': 0,
+        }
+        
+        # Board Members (for testing UI)
+        self.board_members = [
+            BoardMember("Margaret Chen", "Chairwoman", "Conservative", 
+                       "Former Goldman Sachs partner with 30 years in finance. Prioritizes fiscal responsibility."),
+            BoardMember("David Rodriguez", "Vice Chair", "Progressive", 
+                       "Tech entrepreneur and sustainability advocate. Champions innovation and employee welfare."),
+            BoardMember("Sarah Blackwood", "Board Member", "Investor-Focused", 
+                       "Hedge fund manager representing major shareholders. Demands strong returns."),
+            BoardMember("James Mitchell", "Board Member", "Employee-Advocate", 
+                       "Former union leader and labor attorney. Fights for worker protections."),
+            BoardMember("Dr. Raj Patel", "Board Member", "Risk-Taker", 
+                       "Serial entrepreneur with multiple IPO exits. Embraces bold strategies.")
+        ]
 
     def update_day(self): return "OK"
     def calculate_efficiency(self): pass
     def calculate_daily_rnd_cost(self): self.daily_rnd_cost = sum(self.daily_rnd_investment.values())
+    
+    def get_board_approval(self, decision_type: str):
+        """Mock board approval - always approves for testing."""
+        return True, "Mock board approved (3/5 votes)"
+    
     def set_identity(self, corp_name, ceo_name, email_system): 
         self.corp_name = corp_name
         self.ceo_name = ceo_name
@@ -3196,166 +4101,3 @@ if __name__ == "__main__":
         root.mainloop()
     except Exception as e:
         print(f"An unexpected error occurred: {e}")
-        # In modern_ui.py, inside the CEOGameApp class:
-
-    def _show_popup_event(self, event_id):
-        """Displays a custom popup window for mandatory or random events."""
-        event_data = self.game.email_system.POPUP_EVENTS.get(event_id)
-        
-        if not event_data:
-            self.advance_button.configure(state="normal")
-            return
-
-        is_mandatory = (event_id == self.game.email_system.ACTION_PROMPT)
-        
-        # Disable main UI while popup is active
-        self.advance_button.configure(state="disabled") 
-
-        popup = ctk.CTkToplevel(self.master)
-        popup.title(f"{event_data['category']} Event")
-        popup.grab_set() # Modal window
-        popup.attributes('-topmost', True)
-        popup.geometry("600x400")
-        self._set_window_icon(popup)
-        
-        # Title
-        title_text = "MANDATORY ACTION" if is_mandatory else "CRITICAL DECISION"
-        ctk.CTkLabel(popup, text=title_text, font=config.FONT_HEADER).pack(pady=10)
-        
-        # Dialogue Text
-        dialogue_frame = ctk.CTkFrame(popup)
-        dialogue_frame.pack(padx=20, pady=5, fill="x")
-        ctk.CTkLabel(dialogue_frame, 
-                     text=event_data['dialogue'], 
-                     font=config.FONT_BODY, 
-                     wraplength=550, 
-                     justify="left").pack(padx=10, pady=10)
-
-        # Choice Buttons Frame
-        choices_frame = ctk.CTkFrame(popup, fg_color="transparent")
-        choices_frame.pack(pady=10, padx=20)
-        
-        def process_choice(choice_index):
-            # 1. Execute the function stored in the event data
-            choice_func = event_data['choices'][choice_index][1]
-            result_message = choice_func(self.game.email_system)
-            
-            # 2. Cleanup and unlock
-            if event_id in self.game.email_system.POPUP_EVENTS:
-                del self.game.email_system.POPUP_EVENTS[event_id]
-            
-            if is_mandatory:
-                self.game.email_system.ACTION_PROMPT = None
-            
-            # 3. Update UI and show result
-            self._update_status()
-            messagebox.showinfo("Event Result", result_message)
-            popup.destroy()
-            
-            # 4. Re-enable the main button
-            self.advance_button.configure(state="normal") 
-
-        # Create buttons for each choice
-        for i, (text, func, impact_type) in enumerate(event_data['choices']):
-            color = config.COLOR_ACCENT_PRIMARY
-            # Apply color coding for better UX
-            if 'BAD' in event_data['category'] and 'RISK_HIGH' in impact_type:
-                 color = config.COLOR_ACCENT_DANGER
-            elif 'GOOD' in event_data['category'] and 'GAIN_HIGH' in impact_type:
-                 color = config.COLOR_SUCCESS_GREEN
-                 
-            ctk.CTkButton(choices_frame, 
-                          text=f"[{i+1}] {text}", 
-                          command=lambda i=i: process_choice(i),
-                          fg_color=color,
-                          hover_color=color).pack(pady=5, fill="x")
-
-
-# B. Modify your existing _advance_day method (or whatever is bound to your button):
-
-# This is an assumed structure. Integrate the bold lines into your actual function.
-
-    def _advance_day(self):
-        # Prevent double-clicking
-        self.advance_button.configure(state="disabled") 
-        
-        # 1. Process the day
-        self.game.process_day()
-        self._update_status()
-        
-        # 2. Check for pop-up events (Mandatory or Random)
-        event_id = self.game.email_system.check_for_events()
-        
-        if event_id:
-            # All popups are now handled by this function
-            self._show_popup_event(event_id) 
-            # The button will be re-enabled inside _show_popup_event after the choice.
-        else:
-            # Re-enable the button if no popup is shown
-            self.advance_button.configure(state="normal") 
-
-        # Check for game over condition
-        if self.game.game_over_check():
-            messagebox.showinfo("Game Over", self.game.game_over_reason)
-            self.master.destroy()
-    
-    def _generate_ticker_headlines(self):
-        """Generate rotating news headlines (mix of company-specific and general market news)."""
-        corp = self.game
-        
-        # Company-specific headlines (30% chance)
-        company_news = [
-            f"🔹 {corp.corp_name} stock ${corp.stock_price:.2f} ({'+' if corp.stock_price > 25 else ''}{((corp.stock_price-25)/25*100):.1f}%)",
-            f"🔹 Analysts rate {corp.corp_name} as '{corp.analyst_rating}' - Credit: {corp.credit_rating}",
-            f"🔹 {corp.corp_name} holds {corp.customer_base:.0f}% market share in key segments",
-            f"🔹 CEO {corp.ceo_name} leads {corp.corp_name} through {corp.current_scenario.lower()} conditions",
-            f"🔹 {corp.corp_name} market cap reaches ${corp.market_cap/1e6:.0f}M with {corp.shares_outstanding/1e6:.1f}M shares",
-        ]
-        
-        # General market headlines (70%)
-        general_news = [
-            "📊 Dow Jones up 0.8% on strong manufacturing data",
-            "💹 Tech sector rallies amid AI breakthrough announcements",
-            "🏦 Federal Reserve holds rates steady, inflation concerns ease",
-            "🌍 Global supply chains normalize after recent disruptions",
-            "💼 Corporate earnings beat expectations across sectors",
-            "⚡ Energy prices stabilize following OPEC+ production deal",
-            "🚀 Space industry sees $5B in new venture capital funding",
-            "🏭 Manufacturing PMI hits 18-month high",
-            "💻 Cybersecurity spending surges 40% year-over-year",
-            "🌱 ESG investments reach record $8.4 trillion globally",
-            "📱 Consumer tech sales exceed Q4 projections",
-            "🔬 Biotech sector gains on FDA fast-track approvals",
-            "🏢 Commercial real estate shows signs of recovery",
-            "⚙️ Industrial automation adoption accelerates",
-            "🛒 E-commerce growth maintains double-digit pace",
-            "🎮 Gaming industry revenue tops $200B milestone",
-            "🚗 Electric vehicle sales up 65% this quarter",
-            "☁️ Cloud computing market expands to $500B",
-            "📡 5G infrastructure rollout ahead of schedule",
-            "💊 Healthcare costs stabilize for first time in decade"
-        ]
-        
-        # Mix headlines: 2 company-specific, 6 general
-        self.ticker_headlines = random.sample(company_news, 2) + random.sample(general_news, 6)
-        random.shuffle(self.ticker_headlines)
-        self.ticker_index = 0
-    
-    def _update_ticker(self):
-        """Rotate through headlines every 4 seconds."""
-        if self.ticker_headlines:
-            headline = self.ticker_headlines[self.ticker_index]
-            self.ticker_label.configure(text=headline)
-            self.ticker_index = (self.ticker_index + 1) % len(self.ticker_headlines)
-            
-            # Regenerate headlines every full cycle
-            if self.ticker_index == 0:
-                self._generate_ticker_headlines()
-        
-        # Schedule next update
-        self.master.after(4000, self._update_ticker)
-
-if __name__ == "__main__":
-    root = ctk.CTk()
-    app = CEOGameApp(root)
-    root.mainloop()
